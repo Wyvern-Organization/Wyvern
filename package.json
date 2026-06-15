@@ -1,0 +1,29 @@
+{
+  "name": "wyvern-workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:realtime": "vitest run -c vitest.realtime.config.ts",
+    "verify:storage-runtime": "node scripts/verify-storage-runtime.mjs",
+    "verify:runtime": "bash -lc 'npx wrangler dev --config wrangler.jsonc --port 8787 > /tmp/wyvern_wrangler.log 2>&1 & pid=$!; trap \"kill $pid >/dev/null 2>&1 || true\" EXIT; sleep 8; npm run verify:storage-runtime'",
+    "import:legacy-state": "node scripts/migrate-legacy-db.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "hono": "^4.8.5",
+    "jose": "^6.0.11",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.66",
+    "@cloudflare/workers-types": "^4.20260612.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.22.0"
+  }
+}

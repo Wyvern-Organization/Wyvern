@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wyvern UI A</title>
+  <link rel="icon" href="/static/wyvern-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/wyvern-base.css?v=20260606-edgeconnectors2" />
+  <link rel="stylesheet" href="/static/wyvern-ui-a.css?v=20260606-edgeconnectors2" />
+</head>
+
+<body class="wyvern-ui-a">
+  <div id="boot-loader" class="boot-loader">
+    <img class="boot-loader-logo" src="/static/wyvern-logo.png" alt="Wyvern" />
+    <div class="boot-loader-spinner"></div>
+    <div class="boot-loader-text">Loading UI A</div>
+  </div>
+  <div id="changelog-overlay" class="modal-overlay" hidden>
+    <div class="modal changelog-modal" role="dialog" aria-modal="true" aria-labelledby="changelog-modal-title">
+      <div class="changelog-modal-header">
+        <div id="changelog-modal-title" class="changelog-modal-title">Changelog</div>
+        <button id="closeChangelogBtn" class="btn-ghost" type="button">Close</button>
+      </div>
+      <div class="changelog-modal-body">
+        <div id="changelog-status">Loading the latest release notes...</div>
+        <div id="changelog-content" hidden></div>
+      </div>
+    </div>
+  </div>
+  <div id="app"></div>
+  <script>
+    window.WYVERN_BOOTSTRAP = {
+      uiVariantKey: 'ui_a',
+      uiVariantLabel: 'UI A',
+      edgeChooserRoute: '/edge',
+      forceShellVariant: 'modern'
+    };
+  </script>
+  <script src="/static/wyvern-app.js?v=20260606-edgeconnectors2"></script>
+</body>
+
+</html>

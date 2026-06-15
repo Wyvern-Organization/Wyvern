@@ -1,0 +1,284 @@
+body.wyvern-ui-b {
+  --brand: #ff9252;
+  --brand-dim: #d2682f;
+  --hover: #ffd48b;
+  --bg: #130d0b;
+  --bg-2: #1a120f;
+  --bg-3: #221815;
+  --bg-4: #2c1f1b;
+  --bg-5: #382823;
+  --text: #fff7f1;
+  --text-2: rgba(255, 247, 241, 0.86);
+  --text-muted: rgba(255, 247, 241, 0.56);
+  --radius: 16px;
+  --font-head: 'Sora', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 146, 82, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 212, 139, 0.16), transparent 24%),
+    linear-gradient(180deg, #120b09 0%, #060303 100%);
+}
+
+body.wyvern-ui-b #app {
+  background:
+    radial-gradient(circle at top, rgba(255, 146, 82, 0.08), transparent 22%),
+    transparent;
+}
+
+body.wyvern-ui-b .boot-loader {
+  background:
+    radial-gradient(circle at top, rgba(255, 146, 82, 0.16), transparent 26%),
+    linear-gradient(180deg, #130d0b 0%, #050303 100%);
+}
+
+body.wyvern-ui-b .boot-loader-logo {
+  filter: drop-shadow(0 12px 28px rgba(255, 146, 82, 0.34));
+}
+
+body.wyvern-ui-b .boot-loader-spinner {
+  border-top-color: var(--hover);
+}
+
+body.wyvern-ui-b .auth-view {
+  background:
+    radial-gradient(circle at top left, rgba(255, 146, 82, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 212, 139, 0.12), transparent 24%),
+    linear-gradient(180deg, #130d0b 0%, #070404 100%);
+}
+
+body.wyvern-ui-b .auth-card,
+body.wyvern-ui-b .modal,
+body.wyvern-ui-b .directory-modal,
+body.wyvern-ui-b .community-hub-modal,
+body.wyvern-ui-b .settings-hub-modal {
+  border-radius: 28px;
+  border-color: rgba(255, 212, 139, 0.15);
+  background: rgba(24, 16, 13, 0.92);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.44);
+}
+
+body.wyvern-ui-b .auth-logo-icon,
+body.wyvern-ui-b .chat-topbar .ch-icon {
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.22), rgba(255, 212, 139, 0.18));
+}
+
+body.wyvern-ui-b .btn-primary,
+body.wyvern-ui-b .btn-confirm,
+body.wyvern-ui-b .topbar-btn:hover,
+body.wyvern-ui-b .topbar-btn:focus-visible,
+body.wyvern-ui-b .settings-hub-nav-btn:hover,
+body.wyvern-ui-b .settings-hub-nav-btn.active {
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.24), rgba(255, 212, 139, 0.18));
+  border-color: rgba(255, 212, 139, 0.2);
+  color: var(--text);
+}
+
+body.wyvern-ui-b .btn-primary {
+  color: var(--text);
+}
+
+body.wyvern-ui-b .app-layout {
+  padding: 14px;
+  gap: 14px;
+  background:
+    radial-gradient(circle at top, rgba(255, 146, 82, 0.08), transparent 20%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%),
+    transparent;
+}
+
+body.wyvern-ui-b .icon-sidebar,
+body.wyvern-ui-b .channel-sidebar,
+body.wyvern-ui-b .chat-main,
+body.wyvern-ui-b .member-sidebar {
+  border: 1px solid rgba(255, 212, 139, 0.1);
+  border-radius: 28px;
+  background: rgba(22, 15, 12, 0.86);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+body.wyvern-ui-b .icon-sidebar {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+body.wyvern-ui-b .channel-sidebar,
+body.wyvern-ui-b .member-sidebar,
+body.wyvern-ui-b .chat-main {
+  overflow: hidden;
+}
+
+body.wyvern-ui-b .sidebar-brand-row,
+body.wyvern-ui-b .server-pill,
+body.wyvern-ui-b .server-pill-add,
+body.wyvern-ui-b .channel-row,
+body.wyvern-ui-b .dm-row,
+body.wyvern-ui-b .member-row,
+body.wyvern-ui-b .settings-card,
+body.wyvern-ui-b .community-card,
+body.wyvern-ui-b .release-flag-card {
+  border-radius: 20px;
+}
+
+body.wyvern-ui-b .server-pill,
+body.wyvern-ui-b .server-pill-add {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+body.wyvern-ui-b .server-pill:hover,
+body.wyvern-ui-b .server-pill.active,
+body.wyvern-ui-b .sidebar-brand-row:hover,
+body.wyvern-ui-b .sidebar-brand-row.active {
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.18), rgba(255, 212, 139, 0.12));
+  border-color: rgba(255, 212, 139, 0.2);
+}
+
+body.wyvern-ui-b .channel-top,
+body.wyvern-ui-b .member-top,
+body.wyvern-ui-b .chat-topbar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    rgba(17, 12, 10, 0.92);
+  border-bottom-color: rgba(255, 212, 139, 0.1);
+}
+
+body.wyvern-ui-b .chat-main-stage {
+  background:
+    radial-gradient(circle at top, rgba(255, 146, 82, 0.04), transparent 22%),
+    rgba(14, 10, 8, 0.72);
+}
+
+body.wyvern-ui-b .edge-release-banner {
+  border-radius: 24px;
+  border-color: rgba(255, 212, 139, 0.18);
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.16), rgba(255, 212, 139, 0.08));
+}
+
+body.wyvern-ui-b .messages-scroll {
+  padding-top: 22px;
+  padding-bottom: 16px;
+}
+
+body.wyvern-ui-b .msg-group {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid transparent;
+}
+
+body.wyvern-ui-b .msg-group:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 212, 139, 0.12);
+}
+
+body.wyvern-ui-b .msg-author {
+  letter-spacing: 0.01em;
+}
+
+body.wyvern-ui-b .msg-text {
+  color: rgba(255, 247, 241, 0.92);
+}
+
+body.wyvern-ui-b .msg-reply-preview,
+body.wyvern-ui-b .msg-attachment a,
+body.wyvern-ui-b .composer-reply,
+body.wyvern-ui-b .composer-attachments,
+body.wyvern-ui-b .community-hub-panel,
+body.wyvern-ui-b .settings-hub-panel {
+  border-radius: 20px;
+  border-color: rgba(255, 212, 139, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+body.wyvern-ui-b .chat-input-area {
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  border-top-color: rgba(255, 212, 139, 0.1);
+}
+
+body.wyvern-ui-b .chat-input-box,
+body.wyvern-ui-b .modal-input,
+body.wyvern-ui-b .settings-input,
+body.wyvern-ui-b .settings-textarea {
+  border-radius: 22px;
+  border-color: rgba(255, 212, 139, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.wyvern-ui-b .chat-input-box:focus-within,
+body.wyvern-ui-b .modal-input:focus,
+body.wyvern-ui-b .settings-input:focus,
+body.wyvern-ui-b .settings-textarea:focus {
+  border-color: rgba(255, 212, 139, 0.24);
+  box-shadow: 0 0 0 1px rgba(255, 212, 139, 0.12);
+}
+
+body.wyvern-ui-b .input-icon-btn,
+body.wyvern-ui-b .input-pill-btn,
+body.wyvern-ui-b .topbar-btn,
+body.wyvern-ui-b .btn-soft,
+body.wyvern-ui-b .settings-switch,
+body.wyvern-ui-b .settings-meta-chip {
+  border-radius: 999px;
+}
+
+body.wyvern-ui-b .input-icon-btn,
+body.wyvern-ui-b .input-pill-btn,
+body.wyvern-ui-b .topbar-btn,
+body.wyvern-ui-b .btn-soft {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+body.wyvern-ui-b .community-hub-shell,
+body.wyvern-ui-b .settings-hub-shell {
+  border-radius: 26px;
+  background: rgba(18, 13, 11, 0.94);
+}
+
+body.wyvern-ui-b .community-hub-nav,
+body.wyvern-ui-b .settings-hub-nav {
+  background: rgba(255, 255, 255, 0.025);
+  border-right-color: rgba(255, 212, 139, 0.1);
+}
+
+body.wyvern-ui-b .settings-card,
+body.wyvern-ui-b .auth-meta-card,
+body.wyvern-ui-b .settings-meta-chip {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 212, 139, 0.08);
+}
+
+body.wyvern-ui-b .edge-ui-lab-link {
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.22), rgba(255, 212, 139, 0.16));
+  border-color: rgba(255, 212, 139, 0.22);
+}
+
+body.wyvern-ui-b .edge-ui-lab-link:hover {
+  background: linear-gradient(135deg, rgba(255, 146, 82, 0.28), rgba(255, 212, 139, 0.2));
+}
+
+@media (max-width: 1100px) {
+  body.wyvern-ui-b .app-layout {
+    padding: 10px;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 680px) {
+  body.wyvern-ui-b .app-layout {
+    padding: 0;
+    gap: 0;
+  }
+
+  body.wyvern-ui-b .icon-sidebar,
+  body.wyvern-ui-b .channel-sidebar,
+  body.wyvern-ui-b .chat-main,
+  body.wyvern-ui-b .member-sidebar {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}

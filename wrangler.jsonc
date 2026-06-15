@@ -1,0 +1,62 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wyvern-workers",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "app.wyvernhub.net",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "wyvern-media"
+    },
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "wyvern-backups"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "APP_NAME": "Wyvern Workers",
+    "API_V1_PREFIX": "/api/v1",
+    "ENVIRONMENT": "development",
+    "ACCESS_TOKEN_EXPIRE_MINUTES": "15",
+    "REFRESH_TOKEN_EXPIRE_DAYS": "30",
+    "CORS_ORIGINS": "https://wyvernhub.net,https://app.wyvernhub.net",
+    "MEDIA_PUBLIC_BASE_URL": "/media",
+    "ADMIN_ALLOWLIST": "sayori#9491"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENCE_ROOM",
+        "class_name": "PresenceRoom"
+      },
+      {
+        "name": "APP_STATE_ROOM",
+        "class_name": "AppStateRoom"
+      },
+      {
+        "name": "REALTIME_HUB",
+        "class_name": "RealtimeHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PresenceRoom", "AppStateRoom", "RealtimeHub"]
+    }
+  ]
+}

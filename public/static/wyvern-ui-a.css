@@ -1,0 +1,373 @@
+body.wyvern-ui-a {
+  --brand: #8ce7ff;
+  --brand-dim: #379fbc;
+  --hover: #d8f7ff;
+  --bg: #04070d;
+  --bg-2: #0a111a;
+  --bg-3: #101a25;
+  --bg-4: #16212d;
+  --bg-5: #1d2a37;
+  --text: #f7fbff;
+  --text-2: rgba(247, 251, 255, 0.93);
+  --text-muted: rgba(247, 251, 255, 0.58);
+  --sidebar-icons: 72px;
+  --sidebar-channels: 248px;
+  --sidebar-members: 0px;
+  background:
+    radial-gradient(circle at top left, rgba(74, 196, 255, 0.22), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(58, 120, 255, 0.12), transparent 32%),
+    linear-gradient(180deg, #07111a 0%, #03060b 100%);
+}
+
+body.wyvern-ui-a #app {
+  background:
+    linear-gradient(90deg, rgba(140, 231, 255, 0.04), transparent 18%),
+    radial-gradient(circle at 15% 20%, rgba(140, 231, 255, 0.05), transparent 18%);
+}
+
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] {
+  gap: 14px;
+  padding: 14px;
+}
+
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .icon-sidebar,
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .channel-sidebar,
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .chat-main {
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 22px 58px rgba(0, 0, 0, 0.28);
+}
+
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .icon-sidebar {
+  width: var(--sidebar-icons);
+  padding: 14px 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    linear-gradient(180deg, #0e1822 0%, #0a121a 100%);
+  align-items: center;
+}
+
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .channel-sidebar {
+  width: var(--sidebar-channels);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)),
+    linear-gradient(180deg, #121d29 0%, #0c141d 100%);
+}
+
+.wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .chat-main {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+    linear-gradient(180deg, #121924 0%, #0b1118 100%);
+}
+
+.wyvern-ui-a .command-rail-group,
+.wyvern-ui-a .command-rail-stack,
+.wyvern-ui-a .command-rail-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.wyvern-ui-a .command-rail-stack {
+  padding: 8px 0;
+}
+
+.wyvern-ui-a .command-rail-brand,
+.wyvern-ui-a .command-rail-btn {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  color: rgba(247, 251, 255, 0.78);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.wyvern-ui-a .command-rail-brand:hover,
+.wyvern-ui-a .command-rail-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(140, 231, 255, 0.32);
+  background: rgba(140, 231, 255, 0.08);
+  color: #f7fbff;
+}
+
+.wyvern-ui-a .command-rail-brand.active,
+.wyvern-ui-a .command-rail-btn.active {
+  border-color: rgba(140, 231, 255, 0.5);
+  background: linear-gradient(180deg, rgba(140, 231, 255, 0.18), rgba(140, 231, 255, 0.08));
+  color: #f7fbff;
+  box-shadow: 0 14px 34px rgba(58, 167, 216, 0.22);
+}
+
+.wyvern-ui-a .command-rail-brand img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.wyvern-ui-a .command-rail-btn .sidebar-nav-avatar,
+.wyvern-ui-a .command-rail-brand .sidebar-nav-avatar,
+.wyvern-ui-a .command-rail-btn .sidebar-nav-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.wyvern-ui-a .command-rail-unread {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #92ecff;
+  box-shadow: 0 0 0 4px rgba(146, 236, 255, 0.14);
+}
+
+.wyvern-ui-a .server-name-bar,
+.wyvern-ui-a .chat-topbar {
+  height: 68px;
+  padding: 0 22px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
+}
+
+.wyvern-ui-a .server-name-bar h2,
+.wyvern-ui-a .chat-topbar h3,
+.wyvern-ui-a .sidebar-section-title,
+.wyvern-ui-a .member-cat,
+.wyvern-ui-a .ch-category span:first-child {
+  font-family: var(--font-head);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wyvern-ui-a .server-name-bar h2,
+.wyvern-ui-a .chat-topbar h3 {
+  font-size: 14px;
+}
+
+.wyvern-ui-a .sidebar-section-title,
+.wyvern-ui-a .member-cat,
+.wyvern-ui-a .ch-category span:first-child,
+.wyvern-ui-a .command-modal-title,
+.wyvern-ui-a .auth-title {
+  color: rgba(247, 251, 255, 0.86);
+}
+
+.wyvern-ui-a .sidebar-brand-row,
+.wyvern-ui-a .sidebar-nav-row,
+.wyvern-ui-a .ch-item,
+.wyvern-ui-a .dm-item {
+  border-radius: 18px;
+}
+
+.wyvern-ui-a .ch-item,
+.wyvern-ui-a .dm-item {
+  margin: 4px 10px;
+  padding: 12px 14px;
+}
+
+.wyvern-ui-a .ch-item.active,
+.wyvern-ui-a .dm-item.active,
+.wyvern-ui-a .sidebar-nav-row.active {
+  background: linear-gradient(180deg, rgba(140, 231, 255, 0.12), rgba(140, 231, 255, 0.06));
+  border-color: rgba(140, 231, 255, 0.2);
+}
+
+.wyvern-ui-a .topbar-desc,
+.wyvern-ui-a .sidebar-nav-meta,
+.wyvern-ui-a .member-name.muted,
+.wyvern-ui-a .msg-time,
+.wyvern-ui-a .composer-meta-copy,
+.wyvern-ui-a .typing-copy {
+  color: rgba(247, 251, 255, 0.65);
+}
+
+.wyvern-ui-a .messages-scroll {
+  padding: 14px 22px 22px;
+}
+
+.wyvern-ui-a .msg-text {
+  line-height: 1.68;
+}
+
+.wyvern-ui-a .msg-group {
+  margin-bottom: 10px;
+}
+
+.wyvern-ui-a .msg-group.is-merged {
+  margin-bottom: 6px;
+}
+
+.wyvern-ui-a .chat-input-area {
+  padding: 14px 18px 16px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+}
+
+.wyvern-ui-a .composer-toolbar {
+  padding: 0 0 12px;
+}
+
+.wyvern-ui-a .chat-input-box {
+  gap: 14px;
+  min-height: 74px;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(4, 9, 14, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.wyvern-ui-a .chat-textarea {
+  font-size: 15px;
+  line-height: 1.68;
+}
+
+.wyvern-ui-a .input-icon-btn,
+.wyvern-ui-a .input-pill-btn,
+.wyvern-ui-a .topbar-btn,
+.wyvern-ui-a .panel-btn {
+  border-radius: 14px;
+}
+
+.wyvern-ui-a .input-pill-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+}
+
+.wyvern-ui-a .member-sidebar.is-drawer {
+  background: rgba(9, 15, 23, 0.97);
+}
+
+.wyvern-ui-a .auth-view {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(340px, 460px);
+  gap: 28px;
+  padding: 28px;
+}
+
+.wyvern-ui-a .auth-story-panel,
+.wyvern-ui-a .auth-card {
+  position: relative;
+  z-index: 1;
+}
+
+.wyvern-ui-a .auth-story-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  padding: 32px;
+  border-radius: 30px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background:
+    radial-gradient(circle at top left, rgba(140, 231, 255, 0.18), transparent 38%),
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  box-shadow: 0 28px 70px rgba(0,0,0,0.32);
+}
+
+.wyvern-ui-a .auth-story-kicker,
+.wyvern-ui-a .auth-story-card-label {
+  font-family: var(--font-head);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(140, 231, 255, 0.86);
+}
+
+.wyvern-ui-a .auth-story-title {
+  max-width: 12ch;
+  font-family: var(--font-head);
+  font-size: clamp(34px, 4vw, 54px);
+  line-height: 1.05;
+}
+
+.wyvern-ui-a .auth-story-copy {
+  max-width: 56ch;
+  color: rgba(247, 251, 255, 0.7);
+  line-height: 1.72;
+}
+
+.wyvern-ui-a .auth-story-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.wyvern-ui-a .auth-story-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+}
+
+.wyvern-ui-a .auth-story-card strong {
+  display: block;
+  margin-top: 10px;
+  color: rgba(247, 251, 255, 0.82);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.wyvern-ui-a .auth-card {
+  width: 100%;
+  max-width: none;
+  justify-self: end;
+  border-radius: 30px;
+  border-color: rgba(140, 231, 255, 0.18);
+  background: rgba(7, 12, 17, 0.94);
+}
+
+.wyvern-ui-a .auth-title {
+  font-family: var(--font-head);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wyvern-ui-a .modal {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)),
+    linear-gradient(180deg, #0f1720 0%, #0a1018 100%);
+}
+
+.wyvern-ui-a .community-modal {
+  width: min(94vw, 1100px);
+}
+
+.wyvern-ui-a .settings-modal {
+  width: min(94vw, 680px);
+}
+
+@media (max-width: 1180px) {
+  .wyvern-ui-a .auth-view {
+    grid-template-columns: 1fr;
+  }
+
+  .wyvern-ui-a .auth-story-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wyvern-ui-a .auth-card {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 900px) {
+  .wyvern-ui-a .app-layout[data-ui-variant="ui_a"] {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .icon-sidebar {
+    width: 62px;
+  }
+
+  .wyvern-ui-a .app-layout[data-ui-variant="ui_a"] .channel-sidebar {
+    width: min(260px, calc(100vw - 24px));
+  }
+}

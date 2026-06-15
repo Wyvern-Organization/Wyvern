@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wyvern-workers-storage-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-12",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "wyvern-media-test"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "APP_NAME": "Wyvern Workers",
+    "API_V1_PREFIX": "/api/v1",
+    "ENVIRONMENT": "storage-test",
+    "ACCESS_TOKEN_EXPIRE_MINUTES": "15",
+    "REFRESH_TOKEN_EXPIRE_DAYS": "30",
+    "CORS_ORIGINS": "*",
+    "MEDIA_PUBLIC_BASE_URL": "/media"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENCE_ROOM",
+        "class_name": "PresenceRoom"
+      },
+      {
+        "name": "APP_STATE_ROOM",
+        "class_name": "AppStateRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["PresenceRoom", "AppStateRoom"]
+    }
+  ]
+}

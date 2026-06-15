@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wyvern Admin</title>
+  <link rel="icon" href="/static/wyvern-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --neon: #00c8ff;
+      --neon-dim: rgba(0, 200, 255, 0.12);
+      --neon-dimmer: rgba(0, 200, 255, 0.07);
+      --neon-glow: 0 0 10px rgba(0, 200, 255, 0.22);
+      --bg: #000000;
+      --surface: #0a0a0a;
+      --surface-2: #111111;
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #ffffff;
+      --text-soft: rgba(255, 255, 255, 0.82);
+      --text-muted: rgba(255, 255, 255, 0.46);
+      --danger: #ff3a55;
+      --warn: #ffa820;
+      --ok: #00c8ff;
+      --radius: 10px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .shell {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 18px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      background: rgba(0, 0, 0, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      backdrop-filter: blur(12px);
+      margin-bottom: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+    }
+
+    .brand-title {
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-shadow: var(--neon-glow);
+    }
+
+    .brand-sub {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .status-line {
+      color: var(--text-muted);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+    }
+
+    .status-line.ok {
+      color: var(--ok);
+    }
+
+    .status-line.warn {
+      color: var(--warn);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 128px;
+      height: 40px;
+      padding: 0 16px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--neon-dim);
+      color: var(--neon);
+    }
+
+    .btn-primary:hover {
+      background: rgba(0, 200, 255, 0.18);
+      box-shadow: var(--neon-glow);
+    }
+
+    .btn-confirm {
+      background: var(--neon-dim);
+      color: var(--neon);
+    }
+
+    .btn-confirm:hover {
+      background: rgba(0, 200, 255, 0.18);
+      box-shadow: var(--neon-glow);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(8px);
+    }
+
+    .modal {
+      width: min(100%, 640px);
+      max-height: calc(100vh - 40px);
+      overflow: auto;
+      padding: 22px;
+      background: var(--surface);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .hero-card,
+    .stat,
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::before,
+    .stat::before,
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0, 200, 255, 0.32), transparent);
+      opacity: 0.85;
+    }
+
+    .hero-card {
+      padding: 28px;
+    }
+
+    .hero-label {
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      opacity: 0.72;
+      margin-bottom: 10px;
+    }
+
+    .hero-title {
+      color: var(--text);
+      font-family: "Orbitron", sans-serif;
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 800;
+      letter-spacing: 2px;
+      line-height: 1.06;
+    }
+
+    .hero-copy {
+      max-width: 60ch;
+      margin-top: 16px;
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .hero-side {
+      display: grid;
+      gap: 12px;
+    }
+
+    .hero-chip {
+      padding: 16px 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+    }
+
+    .hero-chip-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .hero-chip-value {
+      margin-top: 8px;
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 22px;
+      letter-spacing: 2px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .release-panel {
+      margin-bottom: 16px;
+    }
+
+    .release-panel-body {
+      display: grid;
+      gap: 16px;
+    }
+
+    .release-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .release-stat {
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+    }
+
+    .release-stat-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+    }
+
+    .release-stat-value {
+      margin-top: 8px;
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .release-stat-help {
+      margin-top: 6px;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .release-flags,
+    .release-audit {
+      display: grid;
+      gap: 10px;
+    }
+
+    .release-flag-card,
+    .release-audit-card {
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .release-flag-head,
+    .release-audit-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .release-flag-name {
+      color: var(--text-soft);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .release-flag-desc {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .release-flag-values {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .release-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .release-pill.stable {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+    }
+
+    .release-pill.edge {
+      background: rgba(0, 200, 255, 0.12);
+      color: var(--neon);
+    }
+
+    .release-pill.on {
+      background: rgba(0, 200, 255, 0.16);
+      color: var(--neon);
+    }
+
+    .release-pill.off {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+    }
+
+    .release-pill.pending {
+      background: rgba(255, 168, 32, 0.14);
+      color: var(--warn);
+    }
+
+    .release-pill.locked {
+      background: rgba(0, 200, 255, 0.14);
+      color: var(--neon);
+    }
+
+    .release-audit-card {
+      display: grid;
+      gap: 8px;
+    }
+
+    .release-audit-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+    }
+
+    .release-audit-keys {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .release-empty {
+      display: grid;
+      place-items: center;
+      min-height: 100px;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 16px;
+    }
+
+    .stat {
+      padding: 18px;
+    }
+
+    .stat .label {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+
+    .stat .value {
+      margin-top: 10px;
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.95fr;
+      gap: 16px;
+    }
+
+    .panel {
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-wide {
+      grid-column: 1 / -1;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .panel-title {
+      color: var(--neon);
+      font-family: "Orbitron", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .panel-body {
+      padding: 12px;
+      overflow: auto;
+      max-height: 560px;
+    }
+
+    .activity-item,
+    .row {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .activity-item {
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .activity-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .activity-title {
+      color: var(--text-soft);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.55;
+    }
+
+    .activity-sub {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .activity-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 12px;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .avatar,
+    .icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--neon);
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+    }
+
+    .avatar img,
+    .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .name {
+      color: var(--text-soft);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .sub {
+      margin-top: 3px;
+      color: rgba(255, 255, 255, 0.54);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--neon-dimmer);
+      color: var(--neon);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 180px;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    @media (max-width: 1040px) {
+      .hero,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .release-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        padding: 14px;
+      }
+
+      .topbar {
+        position: static;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .top-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+      }
+
+      .release-summary {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="/wyvern_logo.png" alt="Wyvern" />
+        <div>
+          <div class="brand-title">WYVERN ADMIN</div>
+          <div class="brand-sub">Oversight Console</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span id="status" class="status-line">Loading admin overview...</span>
+        <button id="refreshBtn" class="btn btn-ghost" type="button">Refresh</button>
+        <a class="btn btn-primary" href="/">Open Wyvern</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <article class="hero-card">
+        <div class="hero-label">Operator View</div>
+        <div class="hero-title">See users, servers, and platform activity in one place.</div>
+        <div class="hero-copy">
+          The admin overview tracks the shape of the network in real time, with account visibility, server visibility, and recent activity all surfaced in one neon console.
+        </div>
+      </article>
+
+      <aside class="hero-side">
+        <div class="hero-chip">
+          <div class="hero-chip-label">Visibility</div>
+          <div class="hero-chip-value">LIVE</div>
+        </div>
+        <div class="hero-chip">
+          <div class="hero-chip-label">Scope</div>
+          <div class="hero-chip-value">USERS</div>
+        </div>
+        <div class="hero-chip">
+          <div class="hero-chip-label">Scope</div>
+          <div class="hero-chip-value">SERVERS</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="stats">
+      <article class="stat">
+        <div class="label">Users</div>
+        <div id="usersCount" class="value">-</div>
+      </article>
+      <article class="stat">
+        <div class="label">Servers</div>
+        <div id="serversCount" class="value">-</div>
+      </article>
+      <article class="stat">
+        <div class="label">Activity Events</div>
+        <div id="eventsCount" class="value">-</div>
+      </article>
+    </section>
+
+    <section class="panel panel-wide release-panel">
+      <div class="panel-head">
+        <div class="panel-title">Releases</div>
+        <div class="top-actions">
+          <span id="releaseStatus" class="status-line">Loading release status...</span>
+          <button id="promoteBtn" class="btn btn-primary" type="button">Push Edge to Stable</button>
+        </div>
+      </div>
+      <div class="panel-body release-panel-body">
+        <div id="releaseSummary" class="release-summary"></div>
+        <div id="releaseFlags" class="release-flags"></div>
+        <div>
+          <div class="panel-title" style="margin-bottom: 10px;">Promotion History</div>
+          <div id="releaseAudit" class="release-audit"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Activity</div>
+        </div>
+        <div id="activity" class="panel-body"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Users</div>
+        </div>
+        <div id="users" class="panel-body"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-head">
+          <div class="panel-title">Servers</div>
+        </div>
+        <div id="servers" class="panel-body"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const API_PREFIX = '/api/v1';
+    const statusEl = document.getElementById('status');
+
+    const els = {
+      usersCount: document.getElementById('usersCount'),
+      serversCount: document.getElementById('serversCount'),
+      eventsCount: document.getElementById('eventsCount'),
+      releaseStatus: document.getElementById('releaseStatus'),
+      releaseSummary: document.getElementById('releaseSummary'),
+      releaseFlags: document.getElementById('releaseFlags'),
+      releaseAudit: document.getElementById('releaseAudit'),
+      promoteBtn: document.getElementById('promoteBtn'),
+      activity: document.getElementById('activity'),
+      users: document.getElementById('users'),
+      servers: document.getElementById('servers'),
+      refreshBtn: document.getElementById('refreshBtn'),
+    };
+
+    function initials(value) {
+      const text = String(value || '?').trim();
+      if (!text) return '?';
+      const parts = text.split(/\s+/).slice(0, 2);
+      return parts.map((part) => part.charAt(0).toUpperCase()).join('') || '?';
+    }
+
+    function fmtTs(ts) {
+      const date = new Date(ts);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    function authHeader() {
+      const access = sessionStorage.getItem('wy_access');
+      return access ? { Authorization: `Bearer ${access}` } : {};
+    }
+
+    function normalizeAdminImageUrl(raw = '') {
+      const candidate = String(raw || '').trim();
+      if (!candidate || /[\u0000-\u001f\u007f\\]/.test(candidate)) return null;
+      if (candidate.startsWith('/media/')) {
+        if (candidate.includes('/../') || candidate.endsWith('/..') || candidate.startsWith('/media/../')) return null;
+        return candidate;
+      }
+      try {
+        const parsed = new URL(candidate, location.origin);
+        if (parsed.username || parsed.password) return null;
+        return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function req(path, options = {}) {
+      const res = await fetch(`${API_PREFIX}${path}`, {
+        method: options.method || 'GET',
+        headers: {
+          ...authHeader(),
+          ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.headers || {}),
+        },
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (res.status === 401) {
+        throw new Error('Please sign in first to access admin.');
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error?.message || 'Request failed');
+      }
+      return data.data;
+    }
+
+    function makeAvatar(name, imgUrl) {
+      const wrap = document.createElement('div');
+      wrap.className = 'avatar';
+
+      const safeImgUrl = normalizeAdminImageUrl(imgUrl);
+      if (safeImgUrl) {
+        const img = document.createElement('img');
+        img.src = safeImgUrl;
+        img.alt = name;
+        img.addEventListener('error', () => {
+          wrap.innerHTML = '';
+          wrap.textContent = initials(name);
+        }, { once: true });
+        wrap.appendChild(img);
+      } else {
+        wrap.textContent = initials(name);
+      }
+
+      return wrap;
+    }
+
+    function setStatus(message, type = '') {
+      statusEl.textContent = message;
+      statusEl.className = `status-line${type ? ` ${type}` : ''}`;
+    }
+
+    function renderUsers(users) {
+      if (!users.length) {
+        els.users.innerHTML = '<div class="empty">No users found.</div>';
+        return;
+      }
+
+      const list = document.createElement('div');
+      list.className = 'list';
+
+      for (const user of users) {
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const label = user.display_name || user.username || 'User';
+        row.appendChild(makeAvatar(label, user.avatar));
+
+        const content = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = label;
+
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = `${user.username}#${user.discriminator}${user.bio ? ` • ${user.bio}` : ''}`;
+        content.append(name, sub);
+        row.appendChild(content);
+
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = user.directory_opt_in ? 'Directory On' : 'Directory Off';
+        row.appendChild(tag);
+
+        list.appendChild(row);
+      }
+
+      els.users.replaceChildren(list);
+    }
+
+    function renderServers(servers) {
+      if (!servers.length) {
+        els.servers.innerHTML = '<div class="empty">No servers found.</div>';
+        return;
+      }
+
+      const list = document.createElement('div');
+      list.className = 'list';
+
+      for (const server of servers) {
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const icon = document.createElement('div');
+        icon.className = 'icon';
+        const safeIconUrl = normalizeAdminImageUrl(server.icon);
+        if (safeIconUrl) {
+          const img = document.createElement('img');
+          img.src = safeIconUrl;
+          img.alt = server.name || 'Server';
+          img.addEventListener('error', () => {
+            icon.innerHTML = '';
+            icon.textContent = initials(server.name || 'S');
+          }, { once: true });
+          icon.appendChild(img);
+        } else {
+          icon.textContent = initials(server.name || 'S');
+        }
+        row.appendChild(icon);
+
+        const content = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = server.name || 'Server';
+
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        const desc = (server.description || '').trim();
+        sub.textContent = `${desc || 'No description'} • ${server.member_count || 0} members`;
+        content.append(name, sub);
+        row.appendChild(content);
+
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = server.directory_opt_in ? 'Directory On' : 'Directory Off';
+        row.appendChild(tag);
+
+        list.appendChild(row);
+      }
+
+      els.servers.replaceChildren(list);
+    }
+
+    function renderActivity(activity) {
+      if (!activity.length) {
+        els.activity.innerHTML = '<div class="empty">No activity yet.</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      for (const item of activity) {
+        const card = document.createElement('div');
+        card.className = 'activity-item';
+
+        const title = document.createElement('div');
+        title.className = 'activity-title';
+        title.textContent = item.title || item.type || 'Activity';
+
+        const sub = document.createElement('div');
+        sub.className = 'activity-sub';
+        sub.textContent = item.subtitle || '';
+
+        const meta = document.createElement('div');
+        meta.className = 'activity-meta';
+        const preview = document.createElement('span');
+        preview.textContent = item.preview || '';
+        const time = document.createElement('span');
+        time.textContent = fmtTs(item.timestamp);
+        meta.append(preview, time);
+
+        card.append(title, sub, meta);
+        frag.appendChild(card);
+      }
+
+      els.activity.replaceChildren(frag);
+    }
+
+    function setReleaseStatus(message, type = '') {
+      if (!els.releaseStatus) return;
+      els.releaseStatus.textContent = message;
+      els.releaseStatus.className = `status-line${type ? ` ${type}` : ''}`;
+    }
+
+    function makeReleasePill(label, kind) {
+      return (() => {
+        const pill = document.createElement('span');
+        pill.className = `release-pill ${kind}`;
+        pill.textContent = label;
+        return pill;
+      })();
+    }
+
+    function renderReleaseSummary(status) {
+      const bridge = status?.bridge_health || {};
+      const summary = [
+        {
+          label: 'Release Channel',
+          value: String(status?.release_channel || 'stable').toUpperCase(),
+          help: 'Runtime channel reported by the current host.',
+        },
+        {
+          label: 'Edge Mode',
+          value: bridge.edge_mode_enabled ? 'ENABLED' : 'DISABLED',
+          help: bridge.edge_mode_available
+            ? 'Edge entry is available on this host.'
+            : 'Edge entry is not available on this host yet.',
+        },
+        {
+          label: 'Promotable Flags',
+          value: String(status?.promotable_count || 0),
+          help: 'Flags where Stable and Edge currently differ and can be promoted.',
+        },
+        {
+          label: 'Bridge Health',
+          value: bridge.configured ? 'READY' : 'OFFLINE',
+          help: `Pending ${bridge.pending_outbox || 0} • Dead ${bridge.dead_letter_outbox || 0}`,
+        },
+      ];
+
+      const frag = document.createDocumentFragment();
+      for (const item of summary) {
+        const card = document.createElement('div');
+        card.className = 'release-stat';
+        const label = document.createElement('div');
+        label.className = 'release-stat-label';
+        label.textContent = item.label;
+        const value = document.createElement('div');
+        value.className = 'release-stat-value';
+        value.textContent = item.value;
+        const help = document.createElement('div');
+        help.className = 'release-stat-help';
+        help.textContent = item.help || '';
+        card.append(label, value, help);
+        frag.appendChild(card);
+      }
+      els.releaseSummary.replaceChildren(frag);
+    }
+
+    function renderReleaseFlags(status) {
+      const flags = Array.isArray(status?.flags) ? status.flags : [];
+      const resolved = status?.resolved_feature_flags || {};
+      const stableFlags = status?.stable_feature_flags || {};
+      const edgeFlags = status?.edge_feature_flags || {};
+
+      if (!flags.length) {
+        els.releaseFlags.innerHTML = '<div class="release-empty">No release flags are configured yet.</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      for (const flag of flags) {
+        const stable = !!stableFlags?.[flag.key];
+        const edge = !!edgeFlags?.[flag.key];
+        const current = !!resolved?.[flag.key];
+        const locked = !!flag.channel_locked;
+        const pending = !locked && stable !== edge;
+
+        const card = document.createElement('div');
+        card.className = 'release-flag-card';
+
+        const head = document.createElement('div');
+        head.className = 'release-flag-head';
+
+        const main = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'release-flag-name';
+        name.textContent = flag.key;
+        const desc = document.createElement('div');
+        desc.className = 'release-flag-desc';
+        desc.textContent = flag.description || '';
+        main.append(name, desc);
+
+        const values = document.createElement('div');
+        values.className = 'release-flag-values';
+        values.append(
+          makeReleasePill(`Stable ${stable ? 'On' : 'Off'}`, stable ? 'stable on' : 'stable off'),
+          makeReleasePill(`Edge ${edge ? 'On' : 'Off'}`, edge ? 'edge on' : 'edge off'),
+          makeReleasePill(`Resolved ${current ? 'On' : 'Off'}`, current ? 'on' : 'off'),
+          makeReleasePill(locked ? 'Channel Locked' : (pending ? 'Needs Promotion' : 'Synced'), locked ? 'locked' : (pending ? 'pending' : 'stable'))
+        );
+
+        head.append(main, values);
+        card.append(head);
+        frag.appendChild(card);
+      }
+
+      els.releaseFlags.replaceChildren(frag);
+    }
+
+    function renderReleaseAudit(items) {
+      if (!items.length) {
+        els.releaseAudit.innerHTML = '<div class="release-empty">No promotion history yet.</div>';
+        return;
+      }
+
+      const frag = document.createDocumentFragment();
+      for (const audit of items) {
+        const card = document.createElement('div');
+        card.className = 'release-audit-card';
+
+        const head = document.createElement('div');
+        head.className = 'release-audit-head';
+
+        const main = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'name';
+        title.textContent = audit.promoted_by_label || `User ${audit.promoted_by_user_id || '-'}`;
+        const meta = document.createElement('div');
+        meta.className = 'release-audit-meta';
+        meta.textContent = `Promoted ${fmtTs(audit.promoted_at)}`;
+        main.append(title, meta);
+
+        const keys = document.createElement('div');
+        keys.className = 'release-audit-keys';
+        for (const key of audit.promoted_flag_keys || []) {
+          keys.appendChild(makeReleasePill(key, 'pending'));
+        }
+
+        head.append(main);
+        card.append(head, keys);
+        frag.appendChild(card);
+      }
+
+      els.releaseAudit.replaceChildren(frag);
+    }
+
+    function showPromotionConfirm() {
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.maxWidth = '560px';
+
+        const title = document.createElement('div');
+        title.className = 'hero-title';
+        title.textContent = 'Push Edge to Stable';
+        title.style.fontSize = '28px';
+        title.style.marginBottom = '10px';
+
+        const copy = document.createElement('div');
+        copy.className = 'release-stat-help';
+        copy.style.fontSize = '14px';
+        copy.style.lineHeight = '1.7';
+        copy.innerHTML = 'This copies every promotable Edge flag value into Stable and writes an audit entry. Stable clients will pick up the promoted behavior after reload.';
+
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+
+        const close = (value) => {
+          overlay.remove();
+          resolve(!!value);
+        };
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn-ghost';
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', () => close(false));
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'btn-confirm';
+        confirmBtn.type = 'button';
+        confirmBtn.textContent = 'Push Edge to Stable';
+        confirmBtn.addEventListener('click', () => close(true));
+
+        actions.append(cancelBtn, confirmBtn);
+
+        modal.append(title, copy, actions);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', (event) => {
+          if (event.target === overlay) close(false);
+        });
+      });
+    }
+
+    async function loadReleases() {
+      setReleaseStatus('Loading release status...');
+      try {
+        const [status, audit] = await Promise.all([
+          req('/admin/releases'),
+          req('/admin/releases/audit'),
+        ]);
+
+        renderReleaseSummary(status);
+        renderReleaseFlags(status);
+        renderReleaseAudit(Array.isArray(audit?.items) ? audit.items : []);
+
+        const promotable = Number(status?.promotable_count || 0);
+        const lockedCount = Array.isArray(status?.flags)
+          ? status.flags.filter((flag) => flag?.channel_locked).length
+          : 0;
+        const onStable = String(status?.bridge_health?.node_role || '').toLowerCase() === 'main';
+        const canPromote = onStable && promotable > 0;
+        els.promoteBtn.disabled = !canPromote;
+        setReleaseStatus(
+          !onStable
+            ? 'Promotion is only available on Stable'
+            : promotable > 0
+            ? `${promotable} flag${promotable === 1 ? '' : 's'} ready to promote${lockedCount > 0 ? ` • ${lockedCount} Edge-only flag${lockedCount === 1 ? '' : 's'} stay locked to Edge` : ''}`
+            : lockedCount > 0
+            ? `${lockedCount} Edge-only flag${lockedCount === 1 ? '' : 's'} stay locked to Edge`
+            : 'Stable and Edge flags are currently aligned',
+          canPromote ? 'warn' : (onStable ? 'ok' : 'warn')
+        );
+      } catch (err) {
+        els.releaseSummary.innerHTML = '<div class="release-empty">Could not load release status.</div>';
+        els.releaseFlags.innerHTML = '<div class="release-empty">Could not load release flags.</div>';
+        els.releaseAudit.innerHTML = '<div class="release-empty">Could not load promotion history.</div>';
+        els.promoteBtn.disabled = true;
+        setReleaseStatus(err?.message || 'Failed to load release status', 'warn');
+      }
+    }
+
+    async function loadOverview() {
+      setStatus('Loading admin overview...');
+      try {
+        const data = await req('/admin/overview');
+        const users = Array.isArray(data?.users) ? data.users : [];
+        const servers = Array.isArray(data?.servers) ? data.servers : [];
+        const activity = Array.isArray(data?.activity) ? data.activity : [];
+
+        els.usersCount.textContent = String(users.length);
+        els.serversCount.textContent = String(servers.length);
+        els.eventsCount.textContent = String(activity.length);
+
+        renderUsers(users);
+        renderServers(servers);
+        renderActivity(activity);
+
+        setStatus(`Updated ${new Date().toLocaleTimeString()}`, 'ok');
+      } catch (err) {
+        els.users.innerHTML = '<div class="empty">Could not load users.</div>';
+        els.servers.innerHTML = '<div class="empty">Could not load servers.</div>';
+        els.activity.innerHTML = '<div class="empty">Could not load activity.</div>';
+        setStatus(err?.message || 'Failed to load admin overview', 'warn');
+      }
+    }
+
+    els.promoteBtn.addEventListener('click', async () => {
+      if (els.promoteBtn.disabled) return;
+      const confirmed = await showPromotionConfirm();
+      if (!confirmed) return;
+      els.promoteBtn.disabled = true;
+      setReleaseStatus('Promoting release flags...');
+      try {
+        const result = await req('/admin/releases/promote', { method: 'POST' });
+        const promoted = Number(result?.promoted_count || 0);
+        setReleaseStatus(
+          promoted > 0
+            ? `Promoted ${promoted} flag${promoted === 1 ? '' : 's'} to Stable`
+            : 'Nothing to promote',
+          promoted > 0 ? 'ok' : 'warn'
+        );
+        await Promise.all([loadOverview(), loadReleases()]);
+      } catch (err) {
+        setReleaseStatus(err?.message || 'Promotion failed', 'warn');
+        await loadReleases();
+      }
+    });
+
+    els.refreshBtn.addEventListener('click', refreshAll);
+    async function refreshAll() {
+      await Promise.all([loadOverview(), loadReleases()]);
+    }
+    refreshAll();
+    setInterval(refreshAll, 20000);
+  </script>
+</body>
+</html>
