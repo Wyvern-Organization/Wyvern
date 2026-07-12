@@ -619,9 +619,212 @@
       padding: 24px;
     }
 
+    .toolbar,
+    .filters,
+    .stack,
+    .detail-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .toolbar {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 12px;
+    }
+
+    .field,
+    .textarea,
+    .select {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    .textarea {
+      min-height: 108px;
+      resize: vertical;
+    }
+
+    .filters {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-bottom: 12px;
+    }
+
+    .row-actions,
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-small {
+      min-width: 0;
+      height: 32px;
+      padding: 0 12px;
+      font-size: 11px;
+    }
+
+    .btn-danger {
+      background: rgba(255, 58, 85, 0.12);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 58, 85, 0.18);
+    }
+
+    .btn-warn {
+      background: rgba(255, 168, 32, 0.12);
+      color: var(--warn);
+    }
+
+    .btn-warn:hover {
+      background: rgba(255, 168, 32, 0.18);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 16px;
+    }
+
+    .detail-card {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .detail-grid {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .meta-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      margin-top: 6px;
+      color: var(--text-soft);
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+    }
+
+    .badge.active { color: var(--ok); background: rgba(0, 200, 255, 0.14); }
+    .badge.suspended { color: var(--warn); background: rgba(255, 168, 32, 0.14); }
+    .badge.banned,
+    .badge.soft_deleted { color: var(--danger); background: rgba(255, 58, 85, 0.14); }
+
+    .mail-thread {
+      display: grid;
+      gap: 8px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .mail-card {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .runtime-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+    }
+
+    .runtime-control {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .runtime-control-copy {
+      min-width: 0;
+    }
+
+    .runtime-control-label {
+      color: var(--text-soft);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .runtime-control-help {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .runtime-control input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 2px 0 0;
+      accent-color: var(--neon);
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .report-listing {
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      color: inherit;
+    }
+
+    .report-listing.is-selected {
+      border-color: rgba(0, 200, 255, 0.46);
+      background: rgba(0, 200, 255, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(0, 200, 255, 0.08);
+    }
+
+    .report-detail-section {
+      margin-top: 12px;
+    }
+
+    .report-detail-section:first-child {
+      margin-top: 0;
+    }
+
+    .report-message-snapshot {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     @media (max-width: 1040px) {
       .hero,
-      .grid {
+      .grid,
+      .split {
         grid-template-columns: 1fr;
       }
 
@@ -726,21 +929,134 @@
       <div class="panel-head">
         <div class="panel-title">Releases</div>
         <div class="top-actions">
-          <span id="releaseStatus" class="status-line">Loading release status...</span>
-          <button id="promoteBtn" class="btn btn-primary" type="button">Push Edge to Stable</button>
+          <span id="releaseStatus" class="status-line" data-testid="admin-release-status">Loading release status...</span>
+          <button id="promoteBtn" class="btn btn-primary" type="button" data-testid="admin-promote-button">Push Edge to Stable</button>
         </div>
       </div>
       <div class="panel-body release-panel-body">
-        <div id="releaseSummary" class="release-summary"></div>
-        <div id="releaseFlags" class="release-flags"></div>
+        <div id="releaseSummary" class="release-summary" data-testid="admin-release-summary"></div>
+        <div id="releaseFlags" class="release-flags" data-testid="admin-release-flags"></div>
         <div>
           <div class="panel-title" style="margin-bottom: 10px;">Promotion History</div>
-          <div id="releaseAudit" class="release-audit"></div>
+          <div id="releaseAudit" class="release-audit" data-testid="admin-release-audit"></div>
         </div>
       </div>
     </section>
 
+    <section class="panel panel-wide">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Runtime Controls</div>
+          <div class="sub">Persisted emergency controls for recovery, maintenance, and costly features.</div>
+        </div>
+        <div class="top-actions">
+          <span id="runtimeControlsStatus" class="status-line">Loading controls...</span>
+          <button id="runtimeControlsReloadBtn" class="btn btn-ghost btn-small" type="button">Reload Controls</button>
+        </div>
+      </div>
+      <div id="runtimeControls" class="panel-body" data-testid="admin-runtime-controls"></div>
+    </section>
+
     <section class="grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Account Control</div>
+        </div>
+        <div class="panel-body">
+          <div class="toolbar">
+            <input id="userSearch" class="field" type="search" placeholder="Search users, email, tag, id" data-testid="admin-user-search" />
+            <select id="userStatusFilter" class="select">
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+              <option value="banned">Banned</option>
+              <option value="soft_deleted">Soft deleted</option>
+            </select>
+            <select id="userDirectoryFilter" class="select">
+              <option value="">Directory any</option>
+              <option value="on">Directory on</option>
+              <option value="off">Directory off</option>
+            </select>
+            <select id="userAvatarFilter" class="select">
+              <option value="">Avatar any</option>
+              <option value="yes">Has avatar</option>
+              <option value="no">No avatar</option>
+            </select>
+          </div>
+          <div class="row-actions" style="margin-bottom: 12px;">
+            <button id="userFilterBtn" class="btn btn-primary btn-small" type="button">Apply Filters</button>
+            <button id="userResetBtn" class="btn btn-ghost btn-small" type="button">Reset</button>
+          </div>
+          <div id="users" class="stack" data-testid="admin-users-results"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Moderation Queue</div>
+        </div>
+        <div id="moderationQueue" class="panel-body"></div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Platform Reports</div>
+            <div class="sub">Only DM-message and profile reports appear here. Server reports stay with that server's staff.</div>
+          </div>
+        </div>
+        <div class="panel-body split">
+          <div>
+            <div class="toolbar">
+              <select id="platformReportStatusFilter" class="select" data-testid="admin-platform-report-status-filter">
+                <option value="">All report statuses</option>
+                <option value="open">Open</option>
+                <option value="in_review">In review</option>
+                <option value="actioned">Actioned</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
+            </div>
+            <div class="row-actions" style="margin-bottom: 12px;">
+              <button id="platformReportFilterBtn" class="btn btn-primary btn-small" type="button">Refresh Reports</button>
+            </div>
+            <div id="platformReports" class="stack" data-testid="admin-platform-reports"></div>
+          </div>
+          <div>
+            <div class="panel-title" style="margin-bottom: 10px;">Report Detail</div>
+            <div id="platformReportDetail" class="stack" data-testid="admin-platform-report-detail"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-head">
+          <div class="panel-title">Mail Operations</div>
+        </div>
+        <div class="panel-body split">
+          <div>
+            <div class="toolbar">
+              <input id="mailSearch" class="field" type="search" placeholder="Search sender, subject, body" />
+              <select id="mailStatusFilter" class="select">
+                <option value="">All mail statuses</option>
+                <option value="new">New</option>
+                <option value="open">Open</option>
+                <option value="pending">Pending</option>
+                <option value="closed">Closed</option>
+                <option value="spam">Spam</option>
+              </select>
+            </div>
+            <div class="row-actions" style="margin-bottom: 12px;">
+              <button id="mailFilterBtn" class="btn btn-primary btn-small" type="button">Refresh Inbox</button>
+            </div>
+            <div id="mailInbox" class="stack" data-testid="admin-mail-inbox"></div>
+          </div>
+          <div>
+            <div class="panel-title" style="margin-bottom: 10px;">Mail Detail</div>
+            <div id="mailDetail" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title">Activity</div>
@@ -749,13 +1065,6 @@
       </section>
 
       <section class="panel">
-        <div class="panel-head">
-          <div class="panel-title">Users</div>
-        </div>
-        <div id="users" class="panel-body"></div>
-      </section>
-
-      <section class="panel panel-wide">
         <div class="panel-head">
           <div class="panel-title">Servers</div>
         </div>
@@ -766,6 +1075,12 @@
 
   <script>
     const API_PREFIX = '/api/v1';
+    const state = {
+      selectedMailId: null,
+      selectedPlatformReportId: null,
+      platformReports: [],
+      runtimeControls: null,
+    };
     const statusEl = document.getElementById('status');
 
     const els = {
@@ -777,17 +1092,35 @@
       releaseFlags: document.getElementById('releaseFlags'),
       releaseAudit: document.getElementById('releaseAudit'),
       promoteBtn: document.getElementById('promoteBtn'),
+      runtimeControlsStatus: document.getElementById('runtimeControlsStatus'),
+      runtimeControls: document.getElementById('runtimeControls'),
+      runtimeControlsReloadBtn: document.getElementById('runtimeControlsReloadBtn'),
       activity: document.getElementById('activity'),
       users: document.getElementById('users'),
       servers: document.getElementById('servers'),
+      moderationQueue: document.getElementById('moderationQueue'),
+      platformReports: document.getElementById('platformReports'),
+      platformReportDetail: document.getElementById('platformReportDetail'),
+      platformReportStatusFilter: document.getElementById('platformReportStatusFilter'),
+      platformReportFilterBtn: document.getElementById('platformReportFilterBtn'),
+      mailInbox: document.getElementById('mailInbox'),
+      mailDetail: document.getElementById('mailDetail'),
       refreshBtn: document.getElementById('refreshBtn'),
+      userSearch: document.getElementById('userSearch'),
+      userStatusFilter: document.getElementById('userStatusFilter'),
+      userDirectoryFilter: document.getElementById('userDirectoryFilter'),
+      userAvatarFilter: document.getElementById('userAvatarFilter'),
+      userFilterBtn: document.getElementById('userFilterBtn'),
+      userResetBtn: document.getElementById('userResetBtn'),
+      mailSearch: document.getElementById('mailSearch'),
+      mailStatusFilter: document.getElementById('mailStatusFilter'),
+      mailFilterBtn: document.getElementById('mailFilterBtn'),
     };
 
     function initials(value) {
       const text = String(value || '?').trim();
       if (!text) return '?';
-      const parts = text.split(/\s+/).slice(0, 2);
-      return parts.map((part) => part.charAt(0).toUpperCase()).join('') || '?';
+      return text.split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || '?';
     }
 
     function fmtTs(ts) {
@@ -804,10 +1137,7 @@
     function normalizeAdminImageUrl(raw = '') {
       const candidate = String(raw || '').trim();
       if (!candidate || /[\u0000-\u001f\u007f\\]/.test(candidate)) return null;
-      if (candidate.startsWith('/media/')) {
-        if (candidate.includes('/../') || candidate.endsWith('/..') || candidate.startsWith('/media/../')) return null;
-        return candidate;
-      }
+      if (candidate.startsWith('/media/')) return candidate.includes('/../') ? null : candidate;
       try {
         const parsed = new URL(candidate, location.origin);
         if (parsed.username || parsed.password) return null;
@@ -828,21 +1158,30 @@
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
 
-      if (res.status === 401) {
-        throw new Error('Please sign in first to access admin.');
-      }
-
+      if (res.status === 401) throw new Error('Please sign in first to access admin.');
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error?.message || 'Request failed');
-      }
+      if (!res.ok || !data?.success) throw new Error(data?.error?.message || 'Request failed');
       return data.data;
+    }
+
+    function setStatus(message, type = '') {
+      statusEl.textContent = message;
+      statusEl.className = `status-line${type ? ` ${type}` : ''}`;
+    }
+
+    function setReleaseStatus(message, type = '') {
+      els.releaseStatus.textContent = message;
+      els.releaseStatus.className = `status-line${type ? ` ${type}` : ''}`;
+    }
+
+    function setRuntimeControlsStatus(message, type = '') {
+      els.runtimeControlsStatus.textContent = message;
+      els.runtimeControlsStatus.className = `status-line${type ? ` ${type}` : ''}`;
     }
 
     function makeAvatar(name, imgUrl) {
       const wrap = document.createElement('div');
       wrap.className = 'avatar';
-
       const safeImgUrl = normalizeAdminImageUrl(imgUrl);
       if (safeImgUrl) {
         const img = document.createElement('img');
@@ -856,125 +1195,260 @@
       } else {
         wrap.textContent = initials(name);
       }
-
       return wrap;
     }
 
-    function setStatus(message, type = '') {
-      statusEl.textContent = message;
-      statusEl.className = `status-line${type ? ` ${type}` : ''}`;
+    function makeBadge(text, kind = '') {
+      const badge = document.createElement('span');
+      badge.className = `badge ${kind}`.trim();
+      badge.textContent = text;
+      return badge;
+    }
+
+    function emptyState(message) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      div.textContent = message;
+      return div;
+    }
+
+    function makeMeta(label, value) {
+      const box = document.createElement('div');
+      box.className = 'detail-card';
+      const l = document.createElement('div');
+      l.className = 'meta-label';
+      l.textContent = label;
+      const v = document.createElement('div');
+      v.className = 'meta-value';
+      v.textContent = value ?? '-';
+      box.append(l, v);
+      return box;
+    }
+
+    function queryString(params) {
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, value);
+      });
+      const encoded = query.toString();
+      return encoded ? `?${encoded}` : '';
+    }
+
+    function makeReleasePill(label, kind) {
+      const pill = document.createElement('span');
+      pill.className = `release-pill ${kind}`;
+      pill.textContent = label;
+      return pill;
+    }
+
+    async function confirmAction(title, promptText, confirmLabel = 'Confirm', danger = false, requireReason = true) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        const h = document.createElement('div');
+        h.className = 'hero-title';
+        h.style.fontSize = '24px';
+        h.style.marginBottom = '8px';
+        h.textContent = title;
+        const copy = document.createElement('div');
+        copy.className = 'release-stat-help';
+        copy.style.fontSize = '14px';
+        copy.textContent = promptText;
+        const reason = document.createElement('textarea');
+        reason.className = 'textarea';
+        reason.placeholder = 'Reason (required for audit trail)';
+        reason.setAttribute('data-testid', 'admin-reason-input');
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+        const cancel = document.createElement('button');
+        cancel.className = 'btn btn-ghost';
+        cancel.textContent = 'Cancel';
+        const confirm = document.createElement('button');
+        confirm.className = `btn ${danger ? 'btn-danger' : 'btn-confirm'}`;
+        confirm.textContent = confirmLabel;
+        confirm.addEventListener('click', () => {
+          if (requireReason && !reason.value.trim()) {
+            reason.focus();
+            return;
+          }
+          overlay.remove();
+          resolve(reason.value.trim() || '');
+        });
+        cancel.addEventListener('click', () => {
+          overlay.remove();
+          resolve(null);
+        });
+        actions.append(cancel, confirm);
+        modal.append(h, copy, reason, actions);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+      });
+    }
+
+    function profileModal(detail) {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.setAttribute('data-testid', 'admin-user-modal');
+      const profile = detail.profile || {};
+      const top = document.createElement('div');
+      top.className = 'row';
+      top.style.gridTemplateColumns = 'auto 1fr';
+      top.appendChild(makeAvatar(profile.display_name || profile.username || 'User', profile.avatar));
+      const identity = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'hero-title';
+      name.style.fontSize = '24px';
+      name.textContent = profile.display_name || profile.username || 'User';
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      sub.textContent = `${profile.username || ''}#${profile.discriminator || ''} • ${profile.email || ''}`;
+      identity.append(name, sub);
+      top.appendChild(identity);
+      const pills = document.createElement('div');
+      pills.className = 'pill-row';
+      pills.append(
+        makeBadge(detail.moderation?.status || 'active', detail.moderation?.status || 'active'),
+        makeBadge(`Servers ${detail.counts?.servers || 0}`),
+        makeBadge(`DMs ${detail.counts?.dms || 0}`),
+        makeBadge(`Messages ${detail.counts?.messages || 0}`),
+        makeBadge(`Uploads ${detail.counts?.uploads || 0}`)
+      );
+      const grid = document.createElement('div');
+      grid.className = 'detail-grid';
+      grid.append(
+        makeMeta('Bio', profile.bio || 'No bio'),
+        makeMeta('Directory', profile.directory_opt_in ? 'Opted in' : 'Hidden'),
+        makeMeta('Created', fmtTs(profile.created_at)),
+        makeMeta('Updated moderation', fmtTs(detail.moderation?.updated_at))
+      );
+      const history = document.createElement('div');
+      history.className = 'stack';
+      if ((detail.moderation_history || []).length) {
+        detail.moderation_history.slice(0, 8).forEach((item) => {
+          const card = document.createElement('div');
+          card.className = 'detail-card';
+          card.innerHTML = `<div class="name">${item.action}</div><div class="sub">${item.reason || 'No reason provided'} • ${fmtTs(item.created_at)}</div>`;
+          history.appendChild(card);
+        });
+      } else {
+        history.appendChild(emptyState('No moderation history yet.'));
+      }
+      const closeRow = document.createElement('div');
+      closeRow.className = 'modal-actions';
+      const close = document.createElement('button');
+      close.className = 'btn btn-ghost';
+      close.textContent = 'Close';
+      close.addEventListener('click', () => overlay.remove());
+      closeRow.appendChild(close);
+      modal.append(top, pills, grid, history, closeRow);
+      overlay.appendChild(modal);
+      overlay.addEventListener('click', (event) => { if (event.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    }
+
+    async function runUserAction(user, action, label, danger = false, body = {}) {
+      const reason = await confirmAction(label, `This will ${label.toLowerCase()} for ${user.username}#${user.discriminator}.`, label, danger);
+      if (!reason) return;
+      await req(`/admin/users/${encodeURIComponent(user.id)}/actions/${action}`, {
+        method: 'POST',
+        body: { ...body, reason },
+      });
+      await Promise.all([loadOverview(), loadUsers(), loadModerationQueue()]);
     }
 
     function renderUsers(users) {
       if (!users.length) {
-        els.users.innerHTML = '<div class="empty">No users found.</div>';
+        els.users.replaceChildren(emptyState('No users matched the current filters.'));
         return;
       }
-
       const list = document.createElement('div');
       list.className = 'list';
-
-      for (const user of users) {
+      users.forEach((user) => {
         const row = document.createElement('div');
         row.className = 'row';
-
         const label = user.display_name || user.username || 'User';
         row.appendChild(makeAvatar(label, user.avatar));
 
-        const content = document.createElement('div');
+        const body = document.createElement('div');
         const name = document.createElement('div');
         name.className = 'name';
         name.textContent = label;
-
         const sub = document.createElement('div');
         sub.className = 'sub';
-        sub.textContent = `${user.username}#${user.discriminator}${user.bio ? ` • ${user.bio}` : ''}`;
-        content.append(name, sub);
-        row.appendChild(content);
+        sub.textContent = `${user.username}#${user.discriminator} • ${user.email || 'No email'} • ${user.message_count || 0} messages`;
+        const pills = document.createElement('div');
+        pills.className = 'pill-row';
+        pills.append(
+          makeBadge(user.moderation?.status || 'active', user.moderation?.status || 'active'),
+          makeBadge(user.directory_opt_in ? 'Directory On' : 'Directory Off'),
+          makeBadge(user.avatar ? 'Avatar Present' : 'No Avatar')
+        );
+        body.append(name, sub, pills);
+        row.appendChild(body);
 
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = user.directory_opt_in ? 'Directory On' : 'Directory Off';
-        row.appendChild(tag);
-
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        const inspect = document.createElement('button');
+        inspect.className = 'btn btn-ghost btn-small';
+        inspect.textContent = 'Inspect';
+        inspect.addEventListener('click', async () => profileModal(await req(`/admin/users/${encodeURIComponent(user.id)}`)));
+        const suspend = document.createElement('button');
+        suspend.className = 'btn btn-warn btn-small';
+        suspend.textContent = user.moderation?.status === 'suspended' ? 'Unsuspend' : 'Suspend';
+        suspend.addEventListener('click', () => runUserAction(user, user.moderation?.status === 'suspended' ? 'unsuspend' : 'suspend', user.moderation?.status === 'suspended' ? 'Unsuspend account' : 'Suspend account'));
+        const ban = document.createElement('button');
+        ban.className = 'btn btn-danger btn-small';
+        ban.textContent = user.moderation?.status === 'banned' ? 'Unban' : 'Ban';
+        ban.addEventListener('click', () => runUserAction(user, user.moderation?.status === 'banned' ? 'unban' : 'ban', user.moderation?.status === 'banned' ? 'Unban account' : 'Ban account', true));
+        const redact = document.createElement('button');
+        redact.className = 'btn btn-ghost btn-small';
+        redact.textContent = 'Remove Avatar';
+        redact.addEventListener('click', () => runUserAction(user, 'remove-profile-fields', 'Remove profile media', true, { fields: ['avatar'] }));
+        const softDelete = document.createElement('button');
+        softDelete.className = 'btn btn-danger btn-small';
+        softDelete.textContent = user.moderation?.status === 'soft_deleted' ? 'Restore' : 'Soft Delete';
+        softDelete.addEventListener('click', () => runUserAction(user, user.moderation?.status === 'soft_deleted' ? 'restore' : 'soft-delete', user.moderation?.status === 'soft_deleted' ? 'Restore account' : 'Soft delete account', true));
+        actions.append(inspect, suspend, ban, redact, softDelete);
+        row.appendChild(actions);
         list.appendChild(row);
-      }
-
+      });
       els.users.replaceChildren(list);
     }
 
     function renderServers(servers) {
-      if (!servers.length) {
-        els.servers.innerHTML = '<div class="empty">No servers found.</div>';
-        return;
-      }
-
+      if (!servers.length) return els.servers.replaceChildren(emptyState('No servers found.'));
       const list = document.createElement('div');
       list.className = 'list';
-
-      for (const server of servers) {
+      servers.forEach((server) => {
         const row = document.createElement('div');
         row.className = 'row';
-
-        const icon = document.createElement('div');
-        icon.className = 'icon';
-        const safeIconUrl = normalizeAdminImageUrl(server.icon);
-        if (safeIconUrl) {
-          const img = document.createElement('img');
-          img.src = safeIconUrl;
-          img.alt = server.name || 'Server';
-          img.addEventListener('error', () => {
-            icon.innerHTML = '';
-            icon.textContent = initials(server.name || 'S');
-          }, { once: true });
-          icon.appendChild(img);
-        } else {
-          icon.textContent = initials(server.name || 'S');
-        }
-        row.appendChild(icon);
-
-        const content = document.createElement('div');
+        row.appendChild(makeAvatar(server.name || 'Server', server.icon));
+        const body = document.createElement('div');
         const name = document.createElement('div');
         name.className = 'name';
         name.textContent = server.name || 'Server';
-
         const sub = document.createElement('div');
         sub.className = 'sub';
-        const desc = (server.description || '').trim();
-        sub.textContent = `${desc || 'No description'} • ${server.member_count || 0} members`;
-        content.append(name, sub);
-        row.appendChild(content);
-
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = server.directory_opt_in ? 'Directory On' : 'Directory Off';
-        row.appendChild(tag);
-
+        sub.textContent = `${server.description || 'No description'} • ${server.member_count || 0} members`;
+        body.append(name, sub);
+        row.appendChild(body);
+        row.appendChild(makeBadge(server.directory_opt_in ? 'Directory On' : 'Directory Off'));
         list.appendChild(row);
-      }
-
+      });
       els.servers.replaceChildren(list);
     }
 
     function renderActivity(activity) {
-      if (!activity.length) {
-        els.activity.innerHTML = '<div class="empty">No activity yet.</div>';
-        return;
-      }
-
+      if (!activity.length) return els.activity.replaceChildren(emptyState('No activity yet.'));
       const frag = document.createDocumentFragment();
-      for (const item of activity) {
+      activity.forEach((item) => {
         const card = document.createElement('div');
         card.className = 'activity-item';
-
-        const title = document.createElement('div');
-        title.className = 'activity-title';
-        title.textContent = item.title || item.type || 'Activity';
-
-        const sub = document.createElement('div');
-        sub.className = 'activity-sub';
-        sub.textContent = item.subtitle || '';
-
+        card.innerHTML = `<div class="activity-title">${item.title || item.type || 'Activity'}</div><div class="activity-sub">${item.subtitle || ''}</div>`;
         const meta = document.createElement('div');
         meta.className = 'activity-meta';
         const preview = document.createElement('span');
@@ -982,304 +1456,534 @@
         const time = document.createElement('span');
         time.textContent = fmtTs(item.timestamp);
         meta.append(preview, time);
-
-        card.append(title, sub, meta);
+        card.appendChild(meta);
         frag.appendChild(card);
-      }
-
+      });
       els.activity.replaceChildren(frag);
     }
 
-    function setReleaseStatus(message, type = '') {
-      if (!els.releaseStatus) return;
-      els.releaseStatus.textContent = message;
-      els.releaseStatus.className = `status-line${type ? ` ${type}` : ''}`;
+    function renderModerationQueue(data) {
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const audits = Array.isArray(data?.audits) ? data.audits : [];
+      if (!items.length && !audits.length) return els.moderationQueue.replaceChildren(emptyState('No active moderation items.'));
+      const frag = document.createDocumentFragment();
+      items.slice(0, 10).forEach((user) => {
+        const card = document.createElement('div');
+        card.className = 'detail-card';
+        card.innerHTML = `<div class="name">${user.display_name || user.username}</div><div class="sub">${user.username}#${user.discriminator} • ${user.moderation?.status || 'active'}</div>`;
+        frag.appendChild(card);
+      });
+      audits.slice(0, 10).forEach((audit) => {
+        const card = document.createElement('div');
+        card.className = 'detail-card';
+        card.innerHTML = `<div class="name">${audit.action}</div><div class="sub">${audit.reason || 'No reason provided'} • ${fmtTs(audit.created_at)}</div>`;
+        frag.appendChild(card);
+      });
+      els.moderationQueue.replaceChildren(frag);
     }
 
-    function makeReleasePill(label, kind) {
-      return (() => {
-        const pill = document.createElement('span');
-        pill.className = `release-pill ${kind}`;
-        pill.textContent = label;
-        return pill;
-      })();
+    function renderMailInbox(items) {
+      if (!items.length) return els.mailInbox.replaceChildren(emptyState('No inbound mail matched the current filters.'));
+      const list = document.createElement('div');
+      list.className = 'list';
+      items.forEach((item) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'row';
+        row.style.width = '100%';
+        row.style.background = 'transparent';
+        row.style.border = '1px solid rgba(255,255,255,0.06)';
+        row.addEventListener('click', () => {
+          state.selectedMailId = item.id;
+          loadMailDetail();
+        });
+        const icon = document.createElement('div');
+        icon.className = 'icon';
+        icon.textContent = '✉';
+        row.appendChild(icon);
+        const body = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = item.subject || '(No subject)';
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = `${item.from_name || item.from_address} → ${item.to_address} • ${fmtTs(item.received_at)}`;
+        body.append(name, sub);
+        row.appendChild(body);
+        row.appendChild(makeBadge(item.status || 'new', item.status || 'new'));
+        list.appendChild(row);
+      });
+      els.mailInbox.replaceChildren(list);
+    }
+
+    async function updateMail(messageId, endpoint, body) {
+      await req(`/admin/mail/inbox/${encodeURIComponent(messageId)}/${endpoint}`, { method: 'POST', body });
+      await Promise.all([loadMailInbox(), loadMailDetail()]);
+    }
+
+    function renderMailDetail(data) {
+      if (!data?.item) return els.mailDetail.replaceChildren(emptyState('Select an inbound message to review triage, assignee, and draft intent.'));
+      const item = data.item;
+      const wrap = document.createElement('div');
+      wrap.className = 'stack';
+      const top = document.createElement('div');
+      top.className = 'detail-card';
+      top.innerHTML = `<div class="name">${item.subject || '(No subject)'}</div><div class="sub">${item.from_name || item.from_address} → ${item.to_address} • ${fmtTs(item.received_at)}</div>`;
+      const controls = document.createElement('div');
+      controls.className = 'toolbar';
+      const status = document.createElement('select');
+      status.className = 'select';
+      ['new', 'open', 'pending', 'closed', 'spam'].forEach((value) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        option.selected = item.status === value;
+        status.appendChild(option);
+      });
+      const tags = document.createElement('input');
+      tags.className = 'field';
+      tags.value = (item.tags || []).join(', ');
+      tags.placeholder = 'comma,separated,tags';
+      const assign = document.createElement('input');
+      assign.className = 'field';
+      assign.value = item.assigned_to_user_id || '';
+      assign.placeholder = 'Assignee user id';
+      const saveControls = document.createElement('button');
+      saveControls.className = 'btn btn-primary btn-small';
+      saveControls.textContent = 'Save Triage';
+      saveControls.addEventListener('click', async () => {
+        await updateMail(item.id, 'status', { status: status.value });
+        await updateMail(item.id, 'tags', { tags: tags.value.split(',').map((part) => part.trim()).filter(Boolean) });
+        await updateMail(item.id, 'assign', { assigned_to_user_id: assign.value.trim() || null });
+      });
+      controls.append(status, tags, assign, saveControls);
+      const body = document.createElement('div');
+      body.className = 'detail-card';
+      body.innerHTML = `<div class="meta-label">Body</div><div class="meta-value">${(item.text_body || item.html_body || 'No body available').replace(/</g, '&lt;')}</div>`;
+      const draftCard = document.createElement('div');
+      draftCard.className = 'detail-card';
+      const fromAddress = document.createElement('input');
+      fromAddress.className = 'field';
+      fromAddress.placeholder = 'From address';
+      fromAddress.value = item.draft?.from_address || item.to_address || '';
+      const fromName = document.createElement('input');
+      fromName.className = 'field';
+      fromName.placeholder = 'From name';
+      fromName.value = item.draft?.from_name || 'Wyvern Hub';
+      const subject = document.createElement('input');
+      subject.className = 'field';
+      subject.placeholder = 'Reply subject';
+      subject.value = item.draft?.subject || (item.subject ? (/^re:/i.test(item.subject) ? item.subject : `Re: ${item.subject}`) : 'Re: your message to Wyvern');
+      const replyBody = document.createElement('textarea');
+      replyBody.className = 'textarea';
+      replyBody.placeholder = 'Reply body';
+      replyBody.value = item.draft?.body || '';
+      const note = document.createElement('textarea');
+      note.className = 'textarea';
+      note.placeholder = 'Internal notes';
+      note.value = item.draft?.note || '';
+      const draftButton = document.createElement('button');
+      draftButton.className = 'btn btn-primary btn-small';
+      draftButton.textContent = 'Save Draft';
+      draftButton.addEventListener('click', async () => {
+        await updateMail(item.id, 'draft', {
+          from_address: fromAddress.value.trim() || null,
+          from_name: fromName.value.trim() || null,
+          subject: subject.value.trim() || null,
+          body: replyBody.value,
+          note: note.value,
+        });
+      });
+      const sendButton = document.createElement('button');
+      sendButton.className = 'btn btn-confirm btn-small';
+      sendButton.textContent = 'Send Reply';
+      sendButton.addEventListener('click', async () => {
+        await req(`/admin/mail/inbox/${encodeURIComponent(item.id)}/send`, {
+          method: 'POST',
+          body: {
+            from_address: fromAddress.value.trim() || null,
+            from_name: fromName.value.trim() || null,
+            subject: subject.value.trim() || null,
+            body: replyBody.value,
+            close_after_send: true,
+          },
+        });
+        await Promise.all([loadMailInbox(), loadMailDetail()]);
+      });
+      const draftNodes = [
+        makeMeta('Saved Draft', item.draft?.updated_at ? `Updated ${fmtTs(item.draft.updated_at)}` : 'No draft yet'),
+        item.draft?.sent_at ? makeMeta('Last Send', `${fmtTs(item.draft.sent_at)}${item.draft.provider_status ? ` • ${item.draft.provider_status}` : ''}`) : null,
+        item.draft?.last_error ? makeMeta('Last Error', item.draft.last_error) : null,
+        fromAddress,
+        fromName,
+        subject,
+        replyBody,
+        note,
+        (() => {
+          const actions = document.createElement('div');
+          actions.className = 'row-actions';
+          actions.append(draftButton, sendButton);
+          return actions;
+        })(),
+      ].filter(Boolean);
+      draftCard.append(...draftNodes);
+      const threadWrap = document.createElement('div');
+      threadWrap.className = 'mail-thread';
+      (data.thread || [item]).forEach((entry) => {
+        const card = document.createElement('div');
+        card.className = 'mail-card';
+        card.innerHTML = `<div class="name">${entry.subject || '(No subject)'}</div><div class="sub">${entry.from_address} • ${fmtTs(entry.received_at)}</div>`;
+        threadWrap.appendChild(card);
+      });
+      wrap.append(top, controls, body, draftCard, threadWrap);
+      els.mailDetail.replaceChildren(wrap);
     }
 
     function renderReleaseSummary(status) {
       const bridge = status?.bridge_health || {};
       const summary = [
-        {
-          label: 'Release Channel',
-          value: String(status?.release_channel || 'stable').toUpperCase(),
-          help: 'Runtime channel reported by the current host.',
-        },
-        {
-          label: 'Edge Mode',
-          value: bridge.edge_mode_enabled ? 'ENABLED' : 'DISABLED',
-          help: bridge.edge_mode_available
-            ? 'Edge entry is available on this host.'
-            : 'Edge entry is not available on this host yet.',
-        },
-        {
-          label: 'Promotable Flags',
-          value: String(status?.promotable_count || 0),
-          help: 'Flags where Stable and Edge currently differ and can be promoted.',
-        },
-        {
-          label: 'Bridge Health',
-          value: bridge.configured ? 'READY' : 'OFFLINE',
-          help: `Pending ${bridge.pending_outbox || 0} • Dead ${bridge.dead_letter_outbox || 0}`,
-        },
+        ['Release Channel', String(status?.release_channel || 'stable').toUpperCase(), 'Runtime channel reported by the current host.'],
+        ['Edge Mode', bridge.edge_mode_enabled ? 'ENABLED' : 'DISABLED', bridge.edge_mode_available ? 'Edge entry is available on this host.' : 'Edge entry is not available on this host yet.'],
+        ['Promotable Flags', String(status?.promotable_count || 0), 'Flags where Stable and Edge currently differ and can be promoted.'],
+        ['Bridge Health', bridge.configured ? 'READY' : 'OFFLINE', `Pending ${bridge.pending_outbox || 0} • Dead ${bridge.dead_letter_outbox || 0}`],
       ];
-
       const frag = document.createDocumentFragment();
-      for (const item of summary) {
+      summary.forEach(([labelText, valueText, helpText]) => {
         const card = document.createElement('div');
         card.className = 'release-stat';
-        const label = document.createElement('div');
-        label.className = 'release-stat-label';
-        label.textContent = item.label;
-        const value = document.createElement('div');
-        value.className = 'release-stat-value';
-        value.textContent = item.value;
-        const help = document.createElement('div');
-        help.className = 'release-stat-help';
-        help.textContent = item.help || '';
-        card.append(label, value, help);
+        card.innerHTML = `<div class="release-stat-label">${labelText}</div><div class="release-stat-value">${valueText}</div><div class="release-stat-help">${helpText}</div>`;
         frag.appendChild(card);
-      }
+      });
       els.releaseSummary.replaceChildren(frag);
     }
 
     function renderReleaseFlags(status) {
       const flags = Array.isArray(status?.flags) ? status.flags : [];
-      const resolved = status?.resolved_feature_flags || {};
-      const stableFlags = status?.stable_feature_flags || {};
-      const edgeFlags = status?.edge_feature_flags || {};
-
-      if (!flags.length) {
-        els.releaseFlags.innerHTML = '<div class="release-empty">No release flags are configured yet.</div>';
-        return;
-      }
-
+      if (!flags.length) return els.releaseFlags.replaceChildren(emptyState('No release flags are configured yet.'));
       const frag = document.createDocumentFragment();
-      for (const flag of flags) {
-        const stable = !!stableFlags?.[flag.key];
-        const edge = !!edgeFlags?.[flag.key];
-        const current = !!resolved?.[flag.key];
-        const locked = !!flag.channel_locked;
-        const pending = !locked && stable !== edge;
-
+      flags.forEach((flag) => {
+        const stable = !!status?.stable_feature_flags?.[flag.key];
+        const edge = !!status?.edge_feature_flags?.[flag.key];
+        const current = !!status?.resolved_feature_flags?.[flag.key];
+        const pending = !flag.channel_locked && stable !== edge;
         const card = document.createElement('div');
         card.className = 'release-flag-card';
-
         const head = document.createElement('div');
         head.className = 'release-flag-head';
-
         const main = document.createElement('div');
-        const name = document.createElement('div');
-        name.className = 'release-flag-name';
-        name.textContent = flag.key;
-        const desc = document.createElement('div');
-        desc.className = 'release-flag-desc';
-        desc.textContent = flag.description || '';
-        main.append(name, desc);
-
+        main.innerHTML = `<div class="release-flag-name">${flag.key}</div><div class="release-flag-desc">${flag.description || ''}</div>`;
         const values = document.createElement('div');
         values.className = 'release-flag-values';
         values.append(
           makeReleasePill(`Stable ${stable ? 'On' : 'Off'}`, stable ? 'stable on' : 'stable off'),
           makeReleasePill(`Edge ${edge ? 'On' : 'Off'}`, edge ? 'edge on' : 'edge off'),
           makeReleasePill(`Resolved ${current ? 'On' : 'Off'}`, current ? 'on' : 'off'),
-          makeReleasePill(locked ? 'Channel Locked' : (pending ? 'Needs Promotion' : 'Synced'), locked ? 'locked' : (pending ? 'pending' : 'stable'))
+          makeReleasePill(flag.channel_locked ? 'Channel Locked' : (pending ? 'Needs Promotion' : 'Synced'), flag.channel_locked ? 'locked' : (pending ? 'pending' : 'stable'))
         );
-
         head.append(main, values);
-        card.append(head);
+        card.appendChild(head);
         frag.appendChild(card);
-      }
-
+      });
       els.releaseFlags.replaceChildren(frag);
     }
 
     function renderReleaseAudit(items) {
-      if (!items.length) {
-        els.releaseAudit.innerHTML = '<div class="release-empty">No promotion history yet.</div>';
-        return;
-      }
-
+      if (!items.length) return els.releaseAudit.replaceChildren(emptyState('No promotion history yet.'));
       const frag = document.createDocumentFragment();
-      for (const audit of items) {
+      items.forEach((audit) => {
         const card = document.createElement('div');
         card.className = 'release-audit-card';
-
-        const head = document.createElement('div');
-        head.className = 'release-audit-head';
-
-        const main = document.createElement('div');
-        const title = document.createElement('div');
-        title.className = 'name';
-        title.textContent = audit.promoted_by_label || `User ${audit.promoted_by_user_id || '-'}`;
-        const meta = document.createElement('div');
-        meta.className = 'release-audit-meta';
-        meta.textContent = `Promoted ${fmtTs(audit.promoted_at)}`;
-        main.append(title, meta);
-
         const keys = document.createElement('div');
         keys.className = 'release-audit-keys';
-        for (const key of audit.promoted_flag_keys || []) {
-          keys.appendChild(makeReleasePill(key, 'pending'));
-        }
-
-        head.append(main);
-        card.append(head, keys);
+        (audit.promoted_flag_keys || []).forEach((key) => keys.appendChild(makeReleasePill(key, 'pending')));
+        card.innerHTML = `<div class="name">${audit.promoted_by_label || audit.promoted_by_user_id || 'Unknown admin'}</div><div class="release-audit-meta">Promoted ${fmtTs(audit.promoted_at)}</div>`;
+        card.appendChild(keys);
         frag.appendChild(card);
-      }
-
-      els.releaseAudit.replaceChildren(frag);
-    }
-
-    function showPromotionConfirm() {
-      return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.style.maxWidth = '560px';
-
-        const title = document.createElement('div');
-        title.className = 'hero-title';
-        title.textContent = 'Push Edge to Stable';
-        title.style.fontSize = '28px';
-        title.style.marginBottom = '10px';
-
-        const copy = document.createElement('div');
-        copy.className = 'release-stat-help';
-        copy.style.fontSize = '14px';
-        copy.style.lineHeight = '1.7';
-        copy.innerHTML = 'This copies every promotable Edge flag value into Stable and writes an audit entry. Stable clients will pick up the promoted behavior after reload.';
-
-        const actions = document.createElement('div');
-        actions.className = 'modal-actions';
-
-        const close = (value) => {
-          overlay.remove();
-          resolve(!!value);
-        };
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'btn-ghost';
-        cancelBtn.type = 'button';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.addEventListener('click', () => close(false));
-
-        const confirmBtn = document.createElement('button');
-        confirmBtn.className = 'btn-confirm';
-        confirmBtn.type = 'button';
-        confirmBtn.textContent = 'Push Edge to Stable';
-        confirmBtn.addEventListener('click', () => close(true));
-
-        actions.append(cancelBtn, confirmBtn);
-
-        modal.append(title, copy, actions);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        overlay.addEventListener('click', (event) => {
-          if (event.target === overlay) close(false);
-        });
       });
+      els.releaseAudit.replaceChildren(frag);
     }
 
     async function loadReleases() {
       setReleaseStatus('Loading release status...');
       try {
-        const [status, audit] = await Promise.all([
-          req('/admin/releases'),
-          req('/admin/releases/audit'),
-        ]);
-
+        const [status, audit] = await Promise.all([req('/admin/releases'), req('/admin/releases/audit')]);
         renderReleaseSummary(status);
         renderReleaseFlags(status);
-        renderReleaseAudit(Array.isArray(audit?.items) ? audit.items : []);
-
+        renderReleaseAudit(audit?.items || []);
         const promotable = Number(status?.promotable_count || 0);
-        const lockedCount = Array.isArray(status?.flags)
-          ? status.flags.filter((flag) => flag?.channel_locked).length
-          : 0;
-        const onStable = String(status?.bridge_health?.node_role || '').toLowerCase() === 'main';
-        const canPromote = onStable && promotable > 0;
+        const lockedCount = Array.isArray(status?.flags) ? status.flags.filter((flag) => flag.channel_locked).length : 0;
+        const canPromote = String(status?.bridge_health?.node_role || '').toLowerCase() === 'main' && promotable > 0;
         els.promoteBtn.disabled = !canPromote;
         setReleaseStatus(
-          !onStable
-            ? 'Promotion is only available on Stable'
-            : promotable > 0
-            ? `${promotable} flag${promotable === 1 ? '' : 's'} ready to promote${lockedCount > 0 ? ` • ${lockedCount} Edge-only flag${lockedCount === 1 ? '' : 's'} stay locked to Edge` : ''}`
-            : lockedCount > 0
-            ? `${lockedCount} Edge-only flag${lockedCount === 1 ? '' : 's'} stay locked to Edge`
-            : 'Stable and Edge flags are currently aligned',
-          canPromote ? 'warn' : (onStable ? 'ok' : 'warn')
+          canPromote ? `${promotable} flag${promotable === 1 ? '' : 's'} ready to promote` : (lockedCount ? `${lockedCount} Edge-only flag${lockedCount === 1 ? '' : 's'} stay locked to Edge` : 'Stable and Edge flags are currently aligned'),
+          canPromote ? 'warn' : 'ok'
         );
       } catch (err) {
-        els.releaseSummary.innerHTML = '<div class="release-empty">Could not load release status.</div>';
-        els.releaseFlags.innerHTML = '<div class="release-empty">Could not load release flags.</div>';
-        els.releaseAudit.innerHTML = '<div class="release-empty">Could not load promotion history.</div>';
+        els.releaseSummary.replaceChildren(emptyState('Could not load release status.'));
+        els.releaseFlags.replaceChildren(emptyState('Could not load release flags.'));
+        els.releaseAudit.replaceChildren(emptyState('Could not load promotion history.'));
         els.promoteBtn.disabled = true;
         setReleaseStatus(err?.message || 'Failed to load release status', 'warn');
       }
     }
 
     async function loadOverview() {
-      setStatus('Loading admin overview...');
-      try {
-        const data = await req('/admin/overview');
-        const users = Array.isArray(data?.users) ? data.users : [];
-        const servers = Array.isArray(data?.servers) ? data.servers : [];
-        const activity = Array.isArray(data?.activity) ? data.activity : [];
+      const data = await req('/admin/overview');
+      const users = Array.isArray(data?.users) ? data.users : [];
+      const servers = Array.isArray(data?.servers) ? data.servers : [];
+      const activity = Array.isArray(data?.activity) ? data.activity : [];
+      els.usersCount.textContent = String(data?.metrics?.user_count || users.length);
+      els.serversCount.textContent = String(data?.metrics?.server_count || servers.length);
+      els.eventsCount.textContent = String(data?.metrics?.message_count || activity.length);
+      renderServers(servers);
+      renderActivity(activity);
+    }
 
-        els.usersCount.textContent = String(users.length);
-        els.serversCount.textContent = String(servers.length);
-        els.eventsCount.textContent = String(activity.length);
+    async function loadUsers() {
+      const data = await req(`/admin/users${queryString({
+        q: els.userSearch.value.trim(),
+        status: els.userStatusFilter.value,
+        directory: els.userDirectoryFilter.value,
+        avatar: els.userAvatarFilter.value,
+      })}`);
+      renderUsers(data?.items || []);
+    }
 
-        renderUsers(users);
-        renderServers(servers);
-        renderActivity(activity);
+    async function loadModerationQueue() {
+      renderModerationQueue(await req('/admin/moderation-queue'));
+    }
 
-        setStatus(`Updated ${new Date().toLocaleTimeString()}`, 'ok');
-      } catch (err) {
-        els.users.innerHTML = '<div class="empty">Could not load users.</div>';
-        els.servers.innerHTML = '<div class="empty">Could not load servers.</div>';
-        els.activity.innerHTML = '<div class="empty">Could not load activity.</div>';
-        setStatus(err?.message || 'Failed to load admin overview', 'warn');
+    function renderRuntimeControls(controls) {
+      state.runtimeControls = controls || null;
+      if (!controls) {
+        els.runtimeControls.replaceChildren(emptyState('Runtime controls are unavailable.'));
+        return;
       }
+      const wrap = document.createElement('div');
+      wrap.className = 'stack';
+      const message = document.createElement('textarea');
+      message.className = 'textarea';
+      message.placeholder = 'Maintenance message shown to members';
+      message.value = controls.maintenance_message || '';
+      const fields = [
+        ['maintenance_mode', 'Maintenance mode', 'Pause member traffic while preserving health checks, service webhooks, verification, and admin recovery.'],
+        ['registrations_enabled', 'Registration', 'Allow new accounts to be created.'],
+        ['uploads_enabled', 'Uploads', 'Allow media uploads.'],
+        ['webhooks_enabled', 'Webhooks', 'Allow webhook management and delivery.'],
+        ['community_tools_enabled', 'Community tools', 'Allow search, pins, bookmarks, and related community utilities.'],
+        ['workspaces_enabled', 'Workspaces', 'Allow shared channel workspaces.'],
+        ['voice_enabled', 'Voice', 'Allow voice participation.'],
+        ['ai_enabled', 'Future AI', 'Reserved kill switch. No public AI service is enabled in this launch.'],
+      ];
+      const inputs = new Map();
+      fields.forEach(([key, label, help]) => {
+        const row = document.createElement('label');
+        row.className = 'detail-card';
+        const title = document.createElement('div');
+        title.className = 'name';
+        title.textContent = label;
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = help;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = !!controls[key];
+        inputs.set(key, input);
+        row.append(title, sub, input);
+        wrap.appendChild(row);
+      });
+      const save = document.createElement('button');
+      save.className = 'btn btn-primary btn-small';
+      save.textContent = 'Save Runtime Controls';
+      save.addEventListener('click', async () => {
+        save.disabled = true;
+        try {
+          const payload = { maintenance_message: message.value.trim() || null };
+          inputs.forEach((input, key) => { payload[key] = input.checked; });
+          await req('/runtime/controls', { method: 'PATCH', body: payload });
+          await loadRuntimeControls();
+        } catch (err) {
+          setRuntimeControlsStatus(err?.message || 'Could not save controls', 'warn');
+        } finally {
+          save.disabled = false;
+        }
+      });
+      wrap.append(makeMeta('Maintenance message', 'Shown only while maintenance mode is enabled.'), message, save);
+      els.runtimeControls.replaceChildren(wrap);
+    }
+
+    async function loadRuntimeControls() {
+      setRuntimeControlsStatus('Loading controls...');
+      try {
+        renderRuntimeControls(await req('/runtime/controls'));
+        setRuntimeControlsStatus(`Updated ${new Date().toLocaleTimeString()}`, 'ok');
+      } catch (err) {
+        setRuntimeControlsStatus(err?.message || 'Failed to load controls', 'warn');
+      }
+    }
+
+    function reportLabel(report) {
+      return `${report.target_type === 'message' ? 'Message' : 'Profile'} • ${report.reason || 'other'}`;
+    }
+
+    function renderPlatformReports(items) {
+      state.platformReports = Array.isArray(items) ? items : [];
+      if (!state.platformReports.length) {
+        els.platformReports.replaceChildren(emptyState('No platform reports match this filter.'));
+        return;
+      }
+      const list = document.createElement('div');
+      list.className = 'list';
+      state.platformReports.forEach((report) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'row';
+        row.style.width = '100%';
+        row.style.background = 'transparent';
+        row.style.border = '1px solid rgba(255,255,255,0.06)';
+        const body = document.createElement('div');
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = reportLabel(report);
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = `${report.reported_user?.display_name || report.reported_user?.username || report.reported_user_id} • ${fmtTs(report.created_at)}`;
+        body.append(name, sub);
+        row.append(body, makeBadge(report.status || 'open', report.status || 'open'));
+        row.addEventListener('click', async () => {
+          state.selectedPlatformReportId = report.id;
+          await loadPlatformReportDetail();
+        });
+        list.appendChild(row);
+      });
+      els.platformReports.replaceChildren(list);
+    }
+
+    function renderPlatformReportDetail(report) {
+      if (!report) return els.platformReportDetail.replaceChildren(emptyState('Select a platform report to review its private staff details.'));
+      const wrap = document.createElement('div');
+      wrap.className = 'stack';
+      const summary = document.createElement('div');
+      summary.className = 'detail-card';
+      const title = document.createElement('div');
+      title.className = 'name';
+      title.textContent = reportLabel(report);
+      const meta = document.createElement('div');
+      meta.className = 'sub';
+      meta.textContent = `Reporter: ${report.reporter?.display_name || report.reporter?.username || report.reporter_user_id} • Target: ${report.reported_user?.display_name || report.reported_user?.username || report.reported_user_id}`;
+      summary.append(title, meta, makeMeta('Reporter detail', report.details || 'No additional detail'));
+      if (report.message_snapshot) {
+        summary.append(makeMeta('Reported message', report.message_snapshot.content || '(No text)'), makeMeta('Message context', `${report.message_snapshot.server_name || 'Direct message'} • ${report.message_snapshot.channel_name || report.message_snapshot.channel_id}`));
+      }
+      const status = document.createElement('select');
+      status.className = 'select';
+      ['open', 'in_review', 'actioned', 'dismissed'].forEach((value) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        option.selected = report.status === value;
+        status.appendChild(option);
+      });
+      const resolution = document.createElement('textarea');
+      resolution.className = 'textarea';
+      resolution.placeholder = 'Resolution reason required when actioning or dismissing';
+      resolution.value = report.resolution_reason || '';
+      const save = document.createElement('button');
+      save.className = 'btn btn-primary btn-small';
+      save.textContent = 'Save Report Status';
+      save.addEventListener('click', async () => {
+        await req(`/reports/${encodeURIComponent(report.id)}`, { method: 'PATCH', body: { status: status.value, resolution_reason: resolution.value.trim() || null } });
+        await Promise.all([loadPlatformReports(), loadPlatformReportDetail()]);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'textarea';
+      note.placeholder = 'Private staff note';
+      const addNote = document.createElement('button');
+      addNote.className = 'btn btn-ghost btn-small';
+      addNote.textContent = 'Add Staff Note';
+      addNote.addEventListener('click', async () => {
+        if (!note.value.trim()) return;
+        await req(`/reports/${encodeURIComponent(report.id)}/notes`, { method: 'POST', body: { body: note.value.trim() } });
+        await loadPlatformReportDetail();
+      });
+      const notes = document.createElement('div');
+      notes.className = 'stack';
+      (report.notes || []).forEach((entry) => notes.appendChild(makeMeta(`Staff note • ${fmtTs(entry.created_at)}`, entry.body)));
+      if (!(report.notes || []).length) notes.appendChild(emptyState('No private staff notes yet.'));
+      wrap.append(summary, status, resolution, save, note, addNote, notes);
+      els.platformReportDetail.replaceChildren(wrap);
+    }
+
+    async function loadPlatformReports() {
+      const data = await req(`/admin/reports${queryString({ status: els.platformReportStatusFilter.value })}`);
+      renderPlatformReports(data?.items || []);
+      if (!state.selectedPlatformReportId && data?.items?.[0]) state.selectedPlatformReportId = data.items[0].id;
+    }
+
+    async function loadPlatformReportDetail() {
+      if (!state.selectedPlatformReportId) return renderPlatformReportDetail(null);
+      try {
+        renderPlatformReportDetail(await req(`/reports/${encodeURIComponent(state.selectedPlatformReportId)}`));
+      } catch (err) {
+        state.selectedPlatformReportId = null;
+        renderPlatformReportDetail(null);
+      }
+    }
+
+    async function loadMailInbox() {
+      const data = await req(`/admin/mail/inbox${queryString({ q: els.mailSearch.value.trim(), status: els.mailStatusFilter.value })}`);
+      const items = data?.items || [];
+      renderMailInbox(items);
+      if (!state.selectedMailId && items[0]) state.selectedMailId = items[0].id;
+    }
+
+    async function loadMailDetail() {
+      if (!state.selectedMailId) return renderMailDetail(null);
+      renderMailDetail(await req(`/admin/mail/inbox/${encodeURIComponent(state.selectedMailId)}`));
     }
 
     els.promoteBtn.addEventListener('click', async () => {
-      if (els.promoteBtn.disabled) return;
-      const confirmed = await showPromotionConfirm();
-      if (!confirmed) return;
-      els.promoteBtn.disabled = true;
+      const reason = await confirmAction('Push Edge to Stable', 'This copies promotable Edge values into Stable and writes an audit entry.', 'Push Edge to Stable', false, false);
+      if (reason === null) return;
       setReleaseStatus('Promoting release flags...');
       try {
-        const result = await req('/admin/releases/promote', { method: 'POST' });
-        const promoted = Number(result?.promoted_count || 0);
-        setReleaseStatus(
-          promoted > 0
-            ? `Promoted ${promoted} flag${promoted === 1 ? '' : 's'} to Stable`
-            : 'Nothing to promote',
-          promoted > 0 ? 'ok' : 'warn'
-        );
-        await Promise.all([loadOverview(), loadReleases()]);
-      } catch (err) {
-        setReleaseStatus(err?.message || 'Promotion failed', 'warn');
-        await loadReleases();
-      }
+        await req('/admin/releases/promote', { method: 'POST', body: { reason } });
+      } catch {}
+      await loadReleases();
     });
 
-    els.refreshBtn.addEventListener('click', refreshAll);
+    els.userFilterBtn.addEventListener('click', loadUsers);
+    els.runtimeControlsReloadBtn.addEventListener('click', loadRuntimeControls);
+    els.platformReportFilterBtn.addEventListener('click', async () => {
+      state.selectedPlatformReportId = null;
+      await loadPlatformReports();
+      await loadPlatformReportDetail();
+    });
+    els.userResetBtn.addEventListener('click', () => {
+      els.userSearch.value = '';
+      els.userStatusFilter.value = '';
+      els.userDirectoryFilter.value = '';
+      els.userAvatarFilter.value = '';
+      loadUsers();
+    });
+    els.mailFilterBtn.addEventListener('click', async () => {
+      state.selectedMailId = null;
+      await loadMailInbox();
+      await loadMailDetail();
+    });
+
     async function refreshAll() {
-      await Promise.all([loadOverview(), loadReleases()]);
+      setStatus('Loading admin control panel...');
+      try {
+        await Promise.all([loadOverview(), loadUsers(), loadModerationQueue(), loadReleases(), loadRuntimeControls(), loadPlatformReports(), loadMailInbox()]);
+        await Promise.all([loadMailDetail(), loadPlatformReportDetail()]);
+        setStatus(`Updated ${new Date().toLocaleTimeString()}`, 'ok');
+      } catch (err) {
+        setStatus(err?.message || 'Failed to load admin data', 'warn');
+      }
     }
+
+    els.refreshBtn.addEventListener('click', refreshAll);
     refreshAll();
     setInterval(refreshAll, 20000);
   </script>

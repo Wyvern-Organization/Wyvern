@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wyvern-workers-storage-test",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-12",
+  "compatibility_date": "2025-09-06",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
@@ -11,6 +11,10 @@
     {
       "binding": "MEDIA_BUCKET",
       "bucket_name": "wyvern-media-test"
+    },
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "wyvern-backups-test"
     }
   ],
   "observability": {

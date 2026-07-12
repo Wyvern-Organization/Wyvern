@@ -1,15 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "wyvern-workers",
+  "name": "wyvern-workers-staging",
   "main": "src/index.ts",
   "compatibility_date": "2025-09-06",
-  "workers_dev": false,
-  "routes": [
-    {
-      "pattern": "app.wyvernhub.net",
-      "custom_domain": true
-    }
-  ],
+  "workers_dev": true,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -18,11 +12,11 @@
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "wyvern-media"
+      "bucket_name": "wyvern-media-staging"
     },
     {
       "binding": "BACKUP_BUCKET",
-      "bucket_name": "wyvern-backups"
+      "bucket_name": "wyvern-backups-staging"
     }
   ],
   "observability": {
@@ -32,30 +26,30 @@
     "crons": ["0 3 * * *"]
   },
   "vars": {
-    "APP_NAME": "Wyvern Workers",
+    "APP_NAME": "Wyvern Workers (Staging)",
     "API_V1_PREFIX": "/api/v1",
-    "ENVIRONMENT": "production",
+    "ENVIRONMENT": "staging",
     "ACCESS_TOKEN_EXPIRE_MINUTES": "15",
     "REFRESH_TOKEN_EXPIRE_DAYS": "30",
-    "CORS_ORIGINS": "https://wyvernhub.net,https://app.wyvernhub.net",
+    "CORS_ORIGINS": "https://staging.example.invalid",
     "MEDIA_PUBLIC_BASE_URL": "/media",
-    "ADMIN_ALLOWLIST": "sayori#9491",
+    "ADMIN_ALLOWLIST": "",
     "SMTP2GO_BASE_URL": "https://api.smtp2go.com/v3",
-    "SMTP2GO_DEFAULT_FROM": "noreply@wyvernhub.net",
-    "SMTP2GO_DEFAULT_FROM_NAME": "Wyvern Hub",
+    "SMTP2GO_DEFAULT_FROM": "noreply-staging@wyvernhub.net",
+    "SMTP2GO_DEFAULT_FROM_NAME": "Wyvern Hub Staging",
     "EMAIL_VERIFICATION_CODE_EXPIRE_MINUTES": "15",
     "EMAIL_VERIFICATION_MAX_ATTEMPTS": "5",
     "EMAIL_VERIFICATION_RESEND_SECONDS": "60",
     "EMAIL_VERIFICATION_REQUEST_LIMIT": "5",
     "EMAIL_VERIFICATION_RATE_LIMIT_WINDOW_MINUTES": "60",
-    "EMAIL_VERIFICATION_REQUIRED_VERSION": "1",
+    "EMAIL_VERIFICATION_REQUIRED_VERSION": "0",
     "STRIPE_PRICE_ID": "",
     "STRIPE_SUCCESS_URL": "",
     "STRIPE_CANCEL_URL": "",
     "STRIPE_PORTAL_RETURN_URL": "",
     "SUBSCRIPTIONS_ENABLED": "false",
     "UNIVERSAL_PREMIUM_ACCESS": "true",
-    "REGISTRATION_ENABLED": "true",
+    "REGISTRATION_ENABLED": "false",
     "MAINTENANCE_MODE": "false",
     "MAINTENANCE_MESSAGE": "",
     "FEATURE_UPLOADS_ENABLED": "true",

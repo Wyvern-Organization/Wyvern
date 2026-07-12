@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wyvern-workers-realtime-test",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-12",
+  "compatibility_date": "2025-09-06",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"

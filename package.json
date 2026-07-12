@@ -9,9 +9,14 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:realtime": "vitest run -c vitest.realtime.config.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "load:staging": "node scripts/staging-load.mjs",
+    "load:staging:matrix": "npm run load:staging -- --concurrency=5 --duration=600 && npm run load:staging -- --concurrency=10 --duration=600 && npm run load:staging -- --concurrency=25 --duration=600 && npm run load:staging -- --concurrency=50 --duration=600",
     "verify:storage-runtime": "node scripts/verify-storage-runtime.mjs",
     "verify:runtime": "bash -lc 'npx wrangler dev --config wrangler.jsonc --port 8787 > /tmp/wyvern_wrangler.log 2>&1 & pid=$!; trap \"kill $pid >/dev/null 2>&1 || true\" EXIT; sleep 8; npm run verify:storage-runtime'",
-    "import:legacy-state": "node scripts/migrate-legacy-db.mjs"
+    "import:legacy-state": "node scripts/migrate-legacy-db.mjs",
+    "archive:legacy": "node scripts/archive-legacy-tables.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -20,6 +25,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@cloudflare/vitest-pool-workers": "^0.8.66",
     "@cloudflare/workers-types": "^4.20260612.1",
     "typescript": "^5.9.2",
