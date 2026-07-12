@@ -60,6 +60,7 @@ export interface Env {
   BACKUP_BUCKET?: R2Bucket;
   PRESENCE_ROOM: DurableObjectNamespace;
   REALTIME_HUB?: DurableObjectNamespace;
+  E2E_REALTIME_CLOSE_MS?: string;
   APP_STATE_ROOM?: DurableObjectNamespace;
   RATE_LIMIT_ROOM?: DurableObjectNamespace;
   __APP_STATE__?: AppState;

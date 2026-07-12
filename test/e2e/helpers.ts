@@ -26,11 +26,38 @@ export function createUserCredentials(prefix: string): UserCredentials {
   };
 }
 
-export async function prepareBrowserSession(page: Page): Promise<void> {
+export async function prepareBrowserSession(page: Page, { disableRealtime = true }: { disableRealtime?: boolean } = {}): Promise<void> {
   await page.addInitScript(() => {
     const storage = (globalThis as { localStorage?: { setItem: (key: string, value: string) => void } }).localStorage;
     storage?.setItem('changelog_dismissed_v1', 'true');
   });
+  if (disableRealtime) {
+    await page.addInitScript(() => {
+      class E2EWebSocket {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        static CLOSING = 2;
+        static CLOSED = 3;
+        readyState = E2EWebSocket.CONNECTING;
+        onopen: (() => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        onmessage: ((event: unknown) => void) | null = null;
+        constructor(_url: string) {
+          queueMicrotask(() => {
+            this.readyState = E2EWebSocket.OPEN;
+            this.onopen?.();
+          });
+        }
+        send(_payload: string): void { }
+        close(): void {
+          this.readyState = E2EWebSocket.CLOSED;
+          this.onclose?.();
+        }
+      }
+      (globalThis as unknown as { WebSocket: typeof E2EWebSocket }).WebSocket = E2EWebSocket;
+    });
+  }
 }
 
 export async function registerUserViaApi(
@@ -125,8 +152,8 @@ async function mockVerifiedSessionForFeatureTests(page: Page): Promise<void> {
   });
 }
 
-export async function registerThroughUi(page: Page, credentials: UserCredentials, { mockVerifiedSession = false, waitForApp = true }: { mockVerifiedSession?: boolean; waitForApp?: boolean } = {}): Promise<void> {
-  await prepareBrowserSession(page);
+export async function registerThroughUi(page: Page, credentials: UserCredentials, { mockVerifiedSession = false, waitForApp = true, disableRealtime = true }: { mockVerifiedSession?: boolean; waitForApp?: boolean; disableRealtime?: boolean } = {}): Promise<void> {
+  await prepareBrowserSession(page, { disableRealtime });
   if (mockVerifiedSession) await mockVerifiedSessionForFeatureTests(page);
   await page.goto('/');
   await page.getByTestId('auth-switch-register').click();

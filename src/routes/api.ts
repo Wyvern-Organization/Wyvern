@@ -1142,6 +1142,12 @@ function testRealtimeUpgrade(env: Env, auth: AuthenticatedUser) {
     teardown();
     env.__REALTIME_TEST__!.messages.push(JSON.stringify({ type: 'disconnected', backend: 'shim' }));
   });
+  const closeAfterMs = Number(env.E2E_REALTIME_CLOSE_MS || 0);
+  if (closeAfterMs > 0) {
+    setTimeout(() => {
+      try { server.close(1000, 'e2e idle cleanup'); } catch {}
+    }, closeAfterMs);
+  }
   return new Response(null, { status: 101, webSocket: client });
 }
 

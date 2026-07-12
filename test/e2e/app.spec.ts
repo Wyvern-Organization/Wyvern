@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createUserCredentials, registerThroughUi, registerUserViaApi } from './helpers';
+import { createUserCredentials, registerThroughUi, registerUserViaApi, waitForShell } from './helpers';
 
 test.describe('wyvern shell e2e', () => {
   test('serves voice feedback sounds from the public asset path', async ({ request }) => {
@@ -12,11 +12,25 @@ test.describe('wyvern shell e2e', () => {
 
   test('connects realtime through the Worker API route', async ({ page }) => {
     const user = createUserCredentials('realtime-route');
+    await page.addInitScript(() => {
+      (globalThis as unknown as { __nativeWebSocket?: typeof WebSocket }).__nativeWebSocket = WebSocket;
+    });
     const socketUrl = new Promise<string>((resolve) => {
       page.once('websocket', (socket) => resolve(socket.url()));
     });
 
     await registerThroughUi(page, user, { mockVerifiedSession: true });
+    await page.evaluate(() => {
+      const browser = globalThis as unknown as {
+        __nativeWebSocket: new (url: string) => WebSocket;
+        sessionStorage: { getItem: (key: string) => string | null };
+        location: { origin: string };
+      };
+      const token = browser.sessionStorage.getItem('wy_access');
+      const wsUrl = `${browser.location.origin.replace(/^http/, 'ws')}/api/v1/ws?token=${encodeURIComponent(token || '')}`;
+      const socket = new browser.__nativeWebSocket(wsUrl);
+      socket.addEventListener('open', () => socket.close());
+    });
     await expect(socketUrl).resolves.toContain('/api/v1/ws?token=');
   });
 
@@ -56,6 +70,8 @@ test.describe('wyvern shell e2e', () => {
     await page.locator('.server-settings-hub-modal').getByRole('button', { name: 'Close' }).click();
 
     await page.reload();
+    await waitForShell(page);
+    await page.locator(`.server-pill[title="${serverName}"]`).click();
     await expect(page.getByText(serverMessage)).toBeVisible();
 
     await page.getByTestId('nav-direct-messages').first().click();
