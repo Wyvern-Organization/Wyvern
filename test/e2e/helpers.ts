@@ -85,7 +85,26 @@ export async function seedAuthenticatedSession(
 }
 
 async function mockVerifiedSessionForFeatureTests(page: Page): Promise<void> {
-  await page.route('**/api/v1/users/me', async (route) => {
+  await page.route('**/api/v1/users/me**', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json().catch(() => null) as { data?: Record<string, unknown> } | null;
+    if (!response.ok() || !body?.data) {
+      await route.fulfill({ response });
+      return;
+    }
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        data: {
+          ...body.data,
+          email_verified: true,
+          email_verified_at: new Date().toISOString(),
+        },
+      },
+    });
+  });
+  await page.route('**/edge/api/v1/users/me**', async (route) => {
     const response = await route.fetch();
     const body = await response.json().catch(() => null) as { data?: Record<string, unknown> } | null;
     if (!response.ok() || !body?.data) {
@@ -117,7 +136,15 @@ export async function registerThroughUi(page: Page, credentials: UserCredentials
   await page.getByTestId('auth-password').fill(credentials.password);
   await page.getByTestId('auth-acceptedLegal').check();
   await page.getByTestId('auth-register-submit').click();
-  if (waitForApp) await waitForShell(page);
+  if (waitForApp) {
+    try {
+      await waitForShell(page);
+    } catch (error) {
+      if (!mockVerifiedSession) throw error;
+      await page.reload();
+      await waitForShell(page);
+    }
+  }
 }
 
 export async function waitForShell(page: Page): Promise<void> {
