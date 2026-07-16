@@ -112,7 +112,7 @@ export async function seedAuthenticatedSession(
 }
 
 async function mockVerifiedSessionForFeatureTests(page: Page): Promise<void> {
-  await page.route('**/api/v1/users/me**', async (route) => {
+  await page.route('**/api/v1/users/me', async (route) => {
     const response = await route.fetch();
     const body = await response.json().catch(() => null) as { data?: Record<string, unknown> } | null;
     if (!response.ok() || !body?.data) {
@@ -131,7 +131,7 @@ async function mockVerifiedSessionForFeatureTests(page: Page): Promise<void> {
       },
     });
   });
-  await page.route('**/edge/api/v1/users/me**', async (route) => {
+  await page.route('**/edge/api/v1/users/me', async (route) => {
     const response = await route.fetch();
     const body = await response.json().catch(() => null) as { data?: Record<string, unknown> } | null;
     if (!response.ok() || !body?.data) {
