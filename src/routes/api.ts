@@ -17,6 +17,8 @@ import { ensureWorkspaceGitSnapshot, workspaceGitCommits } from '../lib/workspac
 
 const registerSchema = z.object({ username: z.string().min(2).max(80), display_name: z.string().min(1).max(80).optional(), email: z.string().email(), password: z.string().min(8), accepted_legal: z.boolean(), terms_version: z.string(), privacy_version: z.string() });
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+const passwordResetRequestSchema = z.object({ email: z.string().email() });
+const passwordResetConfirmSchema = z.object({ email: z.string().email(), code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(256) });
 const refreshSchema = z.object({ refresh_token: z.string().min(1) });
 const logoutSchema = refreshSchema;
 const presenceSchema = z.object({ status: z.enum(['online', 'idle', 'dnd']) });
@@ -395,6 +397,10 @@ function verificationCodeHash(userId: string, code: string): Promise<string> {
   return sha256(`wyvern-email-verification:${userId}:${code}`);
 }
 
+function passwordResetCodeHash(userId: string, code: string): Promise<string> {
+  return sha256(`wyvern-password-reset:${userId}:${code}`);
+}
+
 function generateVerificationCode(): string {
   const bytes = new Uint32Array(1);
   crypto.getRandomValues(bytes);
@@ -623,17 +629,22 @@ function isBlockedModerationStatus(status: UserModerationStatus): boolean {
   return status === 'suspended' || status === 'banned' || status === 'soft_deleted';
 }
 
-function moderationMessage(status: UserModerationStatus): string {
+function moderationMessage(status: UserModerationStatus, reason: string | null = null): string {
+  let message: string;
   switch (status) {
     case 'suspended':
-      return 'This account is suspended';
+      message = 'This account is suspended';
+      break;
     case 'banned':
-      return 'This account is banned';
+      message = 'This account is banned';
+      break;
     case 'soft_deleted':
-      return 'This account has been deleted';
+      message = 'This account has been deleted';
+      break;
     default:
-      return 'This account is unavailable';
+      message = 'This account is unavailable';
   }
+  return reason?.trim() ? `${message}. Reason: ${reason.trim()}` : message;
 }
 
 function getEffectiveDisplayName(user: UserRecord): string {
@@ -802,6 +813,7 @@ async function hardDeleteUser(repo: RepositoryHandle, env: Env, user: UserRecord
 
   delete repo.state.users[userId];
   delete repo.state.emailVerifications[userId];
+  delete repo.state.passwordResets[userId];
   delete repo.state.userModerationRecords[userId];
   deleteMatchingRecords(repo.state.refreshTokens, (item) => item.user_id === userId);
   deleteMatchingRecords(repo.state.apiTokens, (item) => item.user_id === userId);
@@ -1262,6 +1274,8 @@ export function buildApiRouter() {
       '/runtime-config',
       '/auth/login',
       '/auth/refresh',
+      '/auth/password-reset/request',
+      '/auth/password-reset/confirm',
       '/auth/verification/request',
       '/auth/verification/confirm',
       '/billing/webhook',
@@ -2019,6 +2033,72 @@ export function buildApiRouter() {
     }
   });
 
+  api.post('/auth/password-reset/request', async (c) => {
+    const payload = passwordResetRequestSchema.parse(await c.req.json());
+    const normalizedEmail = payload.email.toLowerCase().trim();
+    const actorLimited = await enforceRateLimit(c, 'auth.password-reset', normalizedEmail, 5, 60);
+    if (actorLimited) return actorLimited;
+    const clientLimited = await enforceRateLimit(c, 'auth.password-reset.client', clientRateKey(c), 5, 60);
+    if (clientLimited) return clientLimited;
+    const repo = await loadRepository(c.env);
+    const user = getUserByEmail(repo.state, normalizedEmail);
+    const genericResponse = { requested: true, message: 'If that email belongs to an active account, a recovery code has been sent.' };
+    if (!user || isBlockedModerationStatus(getModerationRecord(repo.state, user.id).status)) return successResponse(genericResponse);
+    if (!getConfig(c.env).smtp2goApiKey) return errorResponse('EMAIL_UNAVAILABLE', 'Email recovery is temporarily unavailable', 503);
+
+    const now = Date.now();
+    const code = generateVerificationCode();
+    const expiresAt = new Date(now + getConfig(c.env).emailVerificationCodeExpireMinutes * 60_000).toISOString();
+    try {
+      await sendViaSmtp2go(c.env, {
+        from_address: getConfig(c.env).smtp2goDefaultFrom,
+        from_name: getConfig(c.env).smtp2goDefaultFromName || 'Wyvern',
+        to: [user.email],
+        subject: 'Your Wyvern password recovery code',
+        text_body: `Use this code to reset your Wyvern password: ${code}\n\nIt expires in ${getConfig(c.env).emailVerificationCodeExpireMinutes} minutes. If you did not request this, ignore this email.`,
+      });
+    } catch {
+      return errorResponse('EMAIL_UNAVAILABLE', 'Recovery email could not be sent. Try again later.', 503);
+    }
+    repo.state.passwordResets[user.id] = {
+      user_id: user.id,
+      code_hash: await passwordResetCodeHash(user.id, code),
+      expires_at: expiresAt,
+      failed_attempt_count: 0,
+      locked_until: null,
+      requested_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    };
+    await repo.save();
+    return successResponse(genericResponse);
+  });
+
+  api.post('/auth/password-reset/confirm', async (c) => {
+    const payload = passwordResetConfirmSchema.parse(await c.req.json());
+    const repo = await loadRepository(c.env);
+    const user = getUserByEmail(repo.state, payload.email.toLowerCase().trim());
+    const reset = user ? repo.state.passwordResets[user.id] : null;
+    const invalid = () => errorResponse('INVALID_RESET_CODE', 'Invalid or expired recovery code', 400);
+    if (!user || !reset || isExpired(reset.expires_at)) return invalid();
+    if (reset.locked_until && new Date(reset.locked_until).getTime() > Date.now()) {
+      return errorResponse('RESET_LOCKED', 'Too many invalid recovery attempts. Request a new code.', 429);
+    }
+    if (reset.code_hash !== await passwordResetCodeHash(user.id, payload.code)) {
+      reset.failed_attempt_count += 1;
+      reset.updated_at = nowIso();
+      if (reset.failed_attempt_count >= getConfig(c.env).emailVerificationMaxAttempts) {
+        reset.locked_until = futureIso(getConfig(c.env).emailVerificationCodeExpireMinutes);
+      }
+      await repo.save();
+      return invalid();
+    }
+    user.password_hash = await hashPassword(payload.password);
+    revokeUserRefreshTokens(repo.state, user.id);
+    delete repo.state.passwordResets[user.id];
+    await repo.save();
+    return successResponse({ reset: true });
+  });
+
   api.post('/auth/login', async (c) => {
     const payload = loginSchema.parse(await c.req.json());
     const normalizedEmail = payload.email.toLowerCase().trim();
@@ -2033,7 +2113,7 @@ export function buildApiRouter() {
     if (isBlockedModerationStatus(moderation.status)) {
       revokeUserRefreshTokens(repo.state, user.id);
       await repo.save();
-      return errorResponse('FORBIDDEN', moderationMessage(moderation.status), 403, { moderation_status: moderation.status });
+      return errorResponse('FORBIDDEN', moderationMessage(moderation.status, moderation.reason), 403, { moderation_status: moderation.status, reason: moderation.reason });
     }
     const emailReverificationRequired = requiresEmailReverificationOnLogin(c.env, user);
     if (emailReverificationRequired) resetEmailVerificationForReauthentication(repo, user);
@@ -2061,7 +2141,7 @@ export function buildApiRouter() {
       token.is_revoked = true;
       revokeUserRefreshTokens(repo.state, user.id);
       await repo.save();
-      return errorResponse('FORBIDDEN', moderationMessage(moderation.status), 403, { moderation_status: moderation.status });
+      return errorResponse('FORBIDDEN', moderationMessage(moderation.status, moderation.reason), 403, { moderation_status: moderation.status, reason: moderation.reason });
     }
     return successResponse({ access_token: await issueAccessToken(c.env, toAuthUser(user), getConfig(c.env).accessTokenExpireMinutes), refresh_token: payload.refresh_token });
   });
@@ -2103,7 +2183,7 @@ export function buildApiRouter() {
     if (isBlockedModerationStatus(moderation.status)) {
       revokeUserRefreshTokens(repo.state, user.id);
       await repo.save();
-      return errorResponse('FORBIDDEN', moderationMessage(moderation.status), 403, { moderation_status: moderation.status });
+      return errorResponse('FORBIDDEN', moderationMessage(moderation.status, moderation.reason), 403, { moderation_status: moderation.status, reason: moderation.reason });
     }
     const refreshToken = randomToken('refresh');
     const refreshId = repo.nextId('refresh_token');
@@ -4252,7 +4332,7 @@ export function buildApiRouter() {
       return errorResponse('NOT_FOUND', 'Wyvern user not found', 404);
     }
     const moderation = getModerationRecord(repo.state, user.id);
-    if (isBlockedModerationStatus(moderation.status)) return errorResponse('FORBIDDEN', moderationMessage(moderation.status), 403, { moderation_status: moderation.status });
+    if (isBlockedModerationStatus(moderation.status)) return errorResponse('FORBIDDEN', moderationMessage(moderation.status, moderation.reason), 403, { moderation_status: moderation.status, reason: moderation.reason });
 
     return successResponse({ user: serializeWyvUser(user) });
   });
@@ -4284,7 +4364,7 @@ export function buildApiRouter() {
     const user = repo.state.users[token.user_id];
     if (!user) return errorResponse('UNAUTHORIZED', 'API token user not found', 401);
     const moderation = getModerationRecord(repo.state, user.id);
-    if (isBlockedModerationStatus(moderation.status)) return errorResponse('FORBIDDEN', moderationMessage(moderation.status), 403, { moderation_status: moderation.status });
+    if (isBlockedModerationStatus(moderation.status)) return errorResponse('FORBIDDEN', moderationMessage(moderation.status, moderation.reason), 403, { moderation_status: moderation.status, reason: moderation.reason });
     
     return successResponse({ active: true, token_id: token.id, token_name: token.name, user: serializeWyvUser(user) });
   });

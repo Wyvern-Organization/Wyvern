@@ -34,6 +34,13 @@ test.describe('wyvern shell e2e', () => {
     await expect(socketUrl).resolves.toContain('/api/v1/ws?token=');
   });
 
+  test('offers password recovery from login', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('auth-forgot-password').click();
+    await expect(page.getByTestId('auth-recovery-request')).toBeVisible();
+    await expect(page.getByTestId('auth-email')).toBeVisible();
+  });
+
   test('covers registration, server/channel messaging, DMs, and settings', async ({ page, request }) => {
     const primaryUser = createUserCredentials('shell');
     const buddyUser = createUserCredentials('buddy');

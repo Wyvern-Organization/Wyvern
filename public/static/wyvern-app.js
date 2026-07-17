@@ -355,6 +355,10 @@
         token.set(access, refresh);
         return d;
       },
+      passwordRecovery: {
+        request: (email) => req('POST', '/auth/password-reset/request', { email }),
+        confirm: (email, code, password) => req('POST', '/auth/password-reset/confirm', { email, code, password }),
+      },
       logout: async () => {
         const refresh = token.refresh;
         if (refresh) {
@@ -1336,12 +1340,18 @@
         const audio = getSoundEffect(effectName);
         if (!audio) continue;
         try {
-          const clone = audio.cloneNode();
-          clone.volume = 0;
-          clone.play().then(() => {
-            clone.pause();
-            clone.currentTime = 0;
-          }).catch(() => { });
+          audio.muted = true;
+          audio.volume = 0;
+          audio.currentTime = 0;
+          audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = false;
+            audio.volume = 1;
+          }).catch(() => {
+            audio.muted = false;
+            audio.volume = 1;
+          });
         } catch { }
       }
     }
@@ -1350,10 +1360,11 @@
       const audio = getSoundEffect(effectName);
       if (!audio) return;
       try {
-        const clone = audio.cloneNode();
-        clone.volume = 1;
-        clone.currentTime = 0;
-        void clone.play().catch(() => { });
+        audio.pause();
+        audio.muted = false;
+        audio.volume = 1;
+        audio.currentTime = 0;
+        void audio.play().catch(() => { });
       } catch { }
     }
 
@@ -5756,6 +5767,8 @@ If you do not fully understand these risks, do not enable this mode.`;
 
     function AuthView() {
       let mode = 'login'; // 'login' | 'register'
+      let recoveryEmail = '';
+      let recoveryNotice = '';
 
       const root = el('div', { class: 'auth-view', 'data-testid': 'auth-view' });
       const bg = el('div', { class: 'auth-bg' });
@@ -5783,10 +5796,14 @@ If you do not fully understand these risks, do not enable this mode.`;
         const legal = legalConfig();
         const registrationEnabled = runtimeControlEnabled('registration');
 
-        const title = el('div', { class: 'auth-title' }, mode === 'login' ? 'Sign In' : 'Create Account');
+        const title = el('div', { class: 'auth-title' }, mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Recover Account' : 'Reset Password');
         const introCopy = mode === 'register'
           ? el('div', { class: 'auth-copy' }, 'Creating an account requires a versioned clickwrap agreement. Review the current Terms of Service and Privacy Policy before continuing.')
-          : null;
+          : mode === 'recovery'
+            ? el('div', { class: 'auth-copy' }, 'Enter your email. If it belongs to an active account, we will send a six-digit recovery code.')
+            : mode === 'recovery-confirm'
+              ? el('div', { class: 'auth-copy' }, `Enter code sent to ${recoveryEmail}, then choose a new password.`)
+              : recoveryNotice ? el('div', { class: 'auth-copy' }, recoveryNotice) : null;
 
         const fields = [];
         if (mode === 'register') {
@@ -5795,8 +5812,14 @@ If you do not fully understand these risks, do not enable this mode.`;
           fields.push(displayNameField, usernameField);
         }
         const emailField = mkField('Email', 'email', 'email', 'you@example.com');
-        const passField = mkField('Password', 'password', 'password', '••••••••');
-        fields.push(emailField, passField);
+        if (mode === 'recovery-confirm') {
+          const emailInput = emailField.querySelector('[data-field="email"]');
+          emailInput.value = recoveryEmail;
+          emailInput.readOnly = true;
+        }
+        fields.push(emailField);
+        if (mode === 'recovery-confirm') fields.push(mkField('Recovery Code', 'text', 'recoveryCode', '123456'));
+        if (mode !== 'recovery') fields.push(mkField(mode === 'recovery-confirm' ? 'New Password' : 'Password', 'password', 'password', '••••••••'));
         const legalLinks = mode === 'register'
           ? el('div', { class: 'auth-inline-links' },
             legalLink('Terms of Service', legal.terms_url),
@@ -5810,9 +5833,9 @@ If you do not fully understand these risks, do not enable this mode.`;
         const submitBtn = el('button', {
           class: 'btn-primary',
           disabled: mode === 'register' && !registrationEnabled,
-          'data-testid': mode === 'login' ? 'auth-login-submit' : 'auth-register-submit',
+          'data-testid': mode === 'login' ? 'auth-login-submit' : mode === 'register' ? 'auth-register-submit' : mode === 'recovery' ? 'auth-recovery-request' : 'auth-recovery-confirm',
           onClick: handleSubmit
-        }, mode === 'login' ? 'Sign In' : 'Create Account');
+        }, mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Send Recovery Code' : 'Reset Password');
 
         const switchEl = el('div', { class: 'auth-switch' });
         if (mode === 'login') {
@@ -5822,6 +5845,9 @@ If you do not fully understand these risks, do not enable this mode.`;
               ? el('button', { onClick: () => { mode = 'register'; render(); }, 'data-testid': 'auth-switch-register' }, 'Register')
               : el('span', { class: 'auth-registration-closed' }, 'Registration is temporarily unavailable.')
           );
+          switchEl.append(document.createTextNode(' · '), el('button', { onClick: () => { mode = 'recovery'; recoveryNotice = ''; render(); }, 'data-testid': 'auth-forgot-password' }, 'Forgot password?'));
+        } else if (mode === 'recovery' || mode === 'recovery-confirm') {
+          switchEl.append(document.createTextNode('Remembered your password?'), el('button', { onClick: () => { mode = 'login'; render(); }, 'data-testid': 'auth-switch-login' }, 'Sign In'));
         } else {
           switchEl.append(
             document.createTextNode('Already have an account?'),
@@ -5847,6 +5873,7 @@ If you do not fully understand these risks, do not enable this mode.`;
 
           const email = card.querySelector('[data-field="email"]')?.value.trim();
           const password = card.querySelector('[data-field="password"]')?.value;
+          const recoveryCode = card.querySelector('[data-field="recoveryCode"]')?.value.trim();
           const username = card.querySelector('[data-field="username"]')?.value.trim();
           const displayName = card.querySelector('[data-field="displayName"]')?.value.trim();
           const acceptedLegal = !!card.querySelector('[data-field="acceptedLegal"]')?.checked;
@@ -5854,6 +5881,18 @@ If you do not fully understand these risks, do not enable this mode.`;
           try {
             if (mode === 'login') {
               await auth.login(email, password);
+            } else if (mode === 'recovery') {
+              await auth.passwordRecovery.request(email);
+              recoveryEmail = email;
+              mode = 'recovery-confirm';
+              render();
+              return;
+            } else if (mode === 'recovery-confirm') {
+              await auth.passwordRecovery.confirm(email, recoveryCode, password);
+              mode = 'login';
+              recoveryNotice = 'Password reset. Sign in with your new password.';
+              render();
+              return;
             } else {
               if (!registrationEnabled) {
                 throw new Error(runtimeControlUnavailableMessage('registration'));
@@ -5879,7 +5918,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             errEl.textContent = err?.message || 'Something went wrong. Please try again.';
             errEl.style.display = 'block';
             submitBtn.disabled = false;
-            submitBtn.textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+            submitBtn.textContent = mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Send Recovery Code' : 'Reset Password';
           }
         }
 
@@ -8507,7 +8546,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         await selectChannel(target);
       }
 
-      async function notifyIncomingMessage(message) {
+      async function notifyIncomingMessage(message, { playSound = false } = {}) {
         if (!message?.channel_id) return;
         const currentUserId = store.state.user?.id;
         if (currentUserId && idsEqual(message.author_id, currentUserId)) return;
@@ -8522,7 +8561,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           authorName = displayName(cached || { username: 'Unknown' });
         }
 
-        playSoundEffect('ping');
+        if (playSound) playSoundEffect('ping');
 
         const preview = messagePreviewText(message, 120);
         const channelLabel = resolveChannelLabel(message.channel_id);
@@ -9179,14 +9218,17 @@ If you do not fully understand these risks, do not enable this mode.`;
             if (msgListEl && idsEqual(event.data?.channel_id || event.channel_id, store.state.activeChannelId)) {
               msgListEl.addMessage(event.data);
             }
+            rememberLatestMessage(event.data);
+            const messageChannelId = event.data?.channel_id || event.channel_id;
+            const isActiveMessageChannel = idsEqual(messageChannelId, store.state.activeChannelId);
+            const createsUnreadMessage = !isActiveMessageChannel || !msgListEl?.isNearBottom?.();
             if (!idsEqual(event.data?.author_id, store.state.user?.id)) {
               void (async () => {
                 await ensureIncomingDmVisible(event.data, event.channel || event.data?.channel || null);
-                await notifyIncomingMessage(event.data);
+                await notifyIncomingMessage(event.data, { playSound: createsUnreadMessage });
               })();
             }
-            rememberLatestMessage(event.data);
-            if (idsEqual(event.data?.channel_id || event.channel_id, store.state.activeChannelId)) {
+            if (isActiveMessageChannel) {
               if (msgListEl?.isNearBottom?.() || idsEqual(event.data?.author_id, store.state.user?.id)) {
                 void markChannelRead(event.data?.channel_id || event.channel_id, event.data?.id);
               }

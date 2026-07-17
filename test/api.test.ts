@@ -258,6 +258,40 @@ describe('wyvern workers api', () => {
     expect(await login.json()).toMatchObject({ data: { email_verification_required: true, user: { email_verified: false } } });
   });
 
+  it('recovers a password with a time-limited email code and revokes refresh sessions', async () => {
+    env.SMTP2GO_API_KEY = 'smtp-test-key';
+    await registerAndToken('recoverme');
+    const user = Object.values(env.__APP_STATE__!.users).find((item) => item.email === 'recoverme@example.com')!;
+    const smtpFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      result: 'success',
+      data: { email_id: 'password-recovery' },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const request = await api('/api/v1/auth/password-reset/request', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: user.email }),
+    });
+    expect(request.status).toBe(200);
+    const smtpPayload = JSON.parse(String((smtpFetch.mock.calls[0]?.[1] as RequestInit)?.body || '{}'));
+    const code = String(smtpPayload.text_body).match(/\b\d{6}\b/)?.[0];
+    expect(code).toMatch(/^\d{6}$/);
+    expect((await api('/api/v1/auth/password-reset/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: user.email, code: '000000', password: 'new correct horse battery' }),
+    })).status).toBe(400);
+    expect((await api('/api/v1/auth/password-reset/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: user.email, code, password: 'new correct horse battery' }),
+    })).status).toBe(200);
+    expect((await api('/api/v1/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: user.email, password: 'correct horse battery' }),
+    })).status).toBe(401);
+    expect((await api('/api/v1/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: user.email, password: 'new correct horse battery' }),
+    })).status).toBe(200);
+    expect(Object.values(env.__APP_STATE__!.refreshTokens).filter((item) => item.user_id === user.id).some((item) => item.is_revoked)).toBe(true);
+    smtpFetch.mockRestore();
+  });
+
   it('enforces verification resend cooldown, five attempts, expiry, and client-IP throttling', async () => {
     env.SMTP2GO_API_KEY = 'smtp-test-key';
     const smtpFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ result: 'success', data: { email_id: 'verification-policy' } }), { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -773,11 +807,15 @@ describe('wyvern workers api', () => {
       body: JSON.stringify({ reason: 'cool down' }),
     });
     expect(suspend.status).toBe(200);
-    expect((await api('/api/v1/auth/login', {
+    const blockedLogin = await api('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: 'member@example.com', password: 'correct horse battery' }),
-    })).status).toBe(403);
+    });
+    expect(blockedLogin.status).toBe(403);
+    expect(await blockedLogin.json()).toMatchObject({
+      error: { message: 'This account is suspended. Reason: cool down', details: { moderation_status: 'suspended', reason: 'cool down' } },
+    });
     expect((await api('/api/v1/auth/refresh', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

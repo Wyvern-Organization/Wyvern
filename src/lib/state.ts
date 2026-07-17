@@ -249,6 +249,7 @@ export function createEmptyState(): AppState {
     users: {},
     emailVerifications: {},
     emailVerificationRateLimits: {},
+    passwordResets: {},
     refreshTokens: {},
     apiTokens: {},
     stripeSubscriptions: {},
@@ -375,6 +376,7 @@ export function normalizeState(state: AppState): AppState {
   state.users ||= {};
   state.emailVerifications ||= {};
   state.emailVerificationRateLimits ||= {};
+  state.passwordResets ||= {};
   state.refreshTokens ||= {};
   state.apiTokens ||= {};
   state.stripeSubscriptions ||= {};

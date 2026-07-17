@@ -149,6 +149,16 @@ export interface RefreshTokenRecord {
   is_revoked: boolean;
 }
 
+export interface PasswordResetRecord {
+  user_id: string;
+  code_hash: string;
+  expires_at: string;
+  failed_attempt_count: number;
+  locked_until: string | null;
+  requested_at: string;
+  updated_at: string;
+}
+
 export interface ApiTokenRecord {
   id: string;
   user_id: string;
@@ -623,6 +633,7 @@ export interface AppState {
   users: Record<string, UserRecord>;
   emailVerifications: Record<string, EmailVerificationRecord>;
   emailVerificationRateLimits: Record<string, EmailVerificationRateLimitRecord>;
+  passwordResets: Record<string, PasswordResetRecord>;
   refreshTokens: Record<string, RefreshTokenRecord>;
   apiTokens: Record<string, ApiTokenRecord>;
   stripeSubscriptions: Record<string, StripeSubscriptionRecord>;
