@@ -5707,8 +5707,20 @@ If you do not fully understand these risks, do not enable this mode.`;
       root.replaceTemporaryMessage = (temporaryId, replacement) => {
         const index = msgList.findIndex((item) => idsEqual(item.id, temporaryId));
         if (index < 0) return false;
-        msgList[index] = hydrateMessageState(replacement, msgList[index]);
+        const existingIndex = msgList.findIndex((item, itemIndex) => itemIndex !== index && idsEqual(item.id, replacement?.id));
+        if (existingIndex >= 0) {
+          msgList[existingIndex] = hydrateMessageState(replacement, msgList[existingIndex]);
+          msgList.splice(index, 1);
+        } else {
+          msgList[index] = hydrateMessageState(replacement, msgList[index]);
+        }
         rememberLatestMessage(msgList[msgList.length - 1] || replacement);
+        store.set({
+          messages: {
+            ...(store.state.messages || {}),
+            [idKey(channelId)]: [...msgList],
+          },
+        });
         renderAll();
         return true;
       };

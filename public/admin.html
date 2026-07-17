@@ -1080,6 +1080,8 @@
       selectedPlatformReportId: null,
       platformReports: [],
       runtimeControls: null,
+      userFilterTimer: null,
+      userRequestVersion: 0,
     };
     const statusEl = document.getElementById('status');
 
@@ -1360,6 +1362,89 @@
       await Promise.all([loadOverview(), loadUsers(), loadModerationQueue()]);
     }
 
+    async function confirmTypedValue(title, promptText, expectedValue, testId) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        const h = document.createElement('div');
+        h.className = 'hero-title';
+        h.style.fontSize = '24px';
+        h.style.marginBottom = '8px';
+        h.textContent = title;
+        const copy = document.createElement('div');
+        copy.className = 'release-stat-help';
+        copy.style.fontSize = '14px';
+        copy.textContent = promptText;
+        const input = document.createElement('input');
+        input.className = 'field';
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.setAttribute('data-testid', testId);
+        const error = document.createElement('div');
+        error.className = 'sub';
+        error.style.color = 'var(--danger)';
+        const actions = document.createElement('div');
+        actions.className = 'modal-actions';
+        const cancel = document.createElement('button');
+        cancel.className = 'btn btn-ghost';
+        cancel.textContent = 'Cancel';
+        const confirm = document.createElement('button');
+        confirm.className = 'btn btn-danger';
+        confirm.textContent = 'Continue';
+        confirm.addEventListener('click', () => {
+          if (input.value.trim() !== expectedValue) {
+            error.textContent = `Enter ${expectedValue} exactly to continue.`;
+            input.focus();
+            return;
+          }
+          overlay.remove();
+          resolve(input.value.trim());
+        });
+        cancel.addEventListener('click', () => { overlay.remove(); resolve(null); });
+        actions.append(cancel, confirm);
+        modal.append(h, copy, input, error, actions);
+        overlay.appendChild(modal);
+        overlay.addEventListener('click', (event) => { if (event.target === overlay) { overlay.remove(); resolve(null); } });
+        document.body.appendChild(overlay);
+        input.focus();
+      });
+    }
+
+    async function runHardDelete(user) {
+      const targetTag = `${user.username}#${user.discriminator}`;
+      const reason = await confirmAction(
+        'Layer 1 of 3: permanent deletion',
+        `This permanently removes ${targetTag} and their account data. It cannot be restored. Enter an audit reason to acknowledge this.`,
+        'I understand',
+        true,
+      );
+      if (!reason) return;
+      const target = await confirmTypedValue(
+        'Layer 2 of 3: verify target',
+        `Type ${targetTag} exactly. This prevents deleting the wrong account.`,
+        targetTag,
+        'admin-hard-delete-target',
+      );
+      if (!target) return;
+      const phrase = await confirmTypedValue(
+        'Layer 3 of 3: final confirmation',
+        'Type HARD DELETE exactly to permanently delete this account. This action cannot be undone.',
+        'HARD DELETE',
+        'admin-hard-delete-phrase',
+      );
+      if (!phrase) return;
+      await req(`/admin/users/${encodeURIComponent(user.id)}/actions/hard-delete`, {
+        method: 'POST',
+        body: {
+          reason,
+          confirmations: { acknowledge_irreversible: true, target, phrase },
+        },
+      });
+      await Promise.all([loadOverview(), loadUsers(), loadModerationQueue()]);
+    }
+
     function renderUsers(users) {
       if (!users.length) {
         els.users.replaceChildren(emptyState('No users matched the current filters.'));
@@ -1412,7 +1497,12 @@
         softDelete.className = 'btn btn-danger btn-small';
         softDelete.textContent = user.moderation?.status === 'soft_deleted' ? 'Restore' : 'Soft Delete';
         softDelete.addEventListener('click', () => runUserAction(user, user.moderation?.status === 'soft_deleted' ? 'restore' : 'soft-delete', user.moderation?.status === 'soft_deleted' ? 'Restore account' : 'Soft delete account', true));
-        actions.append(inspect, suspend, ban, redact, softDelete);
+        const hardDelete = document.createElement('button');
+        hardDelete.className = 'btn btn-danger btn-small';
+        hardDelete.textContent = 'Hard Delete';
+        hardDelete.title = 'Permanently delete this account';
+        hardDelete.addEventListener('click', () => runHardDelete(user));
+        actions.append(inspect, suspend, ban, redact, softDelete, hardDelete);
         row.appendChild(actions);
         list.appendChild(row);
       });
@@ -1740,13 +1830,30 @@
     }
 
     async function loadUsers() {
+      const requestVersion = ++state.userRequestVersion;
       const data = await req(`/admin/users${queryString({
         q: els.userSearch.value.trim(),
         status: els.userStatusFilter.value,
         directory: els.userDirectoryFilter.value,
         avatar: els.userAvatarFilter.value,
       })}`);
+      if (requestVersion !== state.userRequestVersion) return;
       renderUsers(data?.items || []);
+    }
+
+    function applyUserFilters() {
+      void loadUsers().catch((error) => {
+        renderUsers([]);
+        setStatus(error?.message || 'Could not filter users.', 'warn');
+      });
+    }
+
+    function scheduleUserFilters() {
+      if (state.userFilterTimer) clearTimeout(state.userFilterTimer);
+      state.userFilterTimer = setTimeout(() => {
+        state.userFilterTimer = null;
+        applyUserFilters();
+      }, 250);
     }
 
     async function loadModerationQueue() {
@@ -1952,7 +2059,17 @@
       await loadReleases();
     });
 
-    els.userFilterBtn.addEventListener('click', loadUsers);
+    els.userFilterBtn.addEventListener('click', applyUserFilters);
+    els.userSearch.addEventListener('input', scheduleUserFilters);
+    els.userSearch.addEventListener('search', applyUserFilters);
+    els.userSearch.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      applyUserFilters();
+    });
+    [els.userStatusFilter, els.userDirectoryFilter, els.userAvatarFilter].forEach((filter) => {
+      filter.addEventListener('change', applyUserFilters);
+    });
     els.runtimeControlsReloadBtn.addEventListener('click', loadRuntimeControls);
     els.platformReportFilterBtn.addEventListener('click', async () => {
       state.selectedPlatformReportId = null;
@@ -1964,7 +2081,7 @@
       els.userStatusFilter.value = '';
       els.userDirectoryFilter.value = '';
       els.userAvatarFilter.value = '';
-      loadUsers();
+      applyUserFilters();
     });
     els.mailFilterBtn.addEventListener('click', async () => {
       state.selectedMailId = null;

@@ -88,8 +88,14 @@ test.describe('wyvern admin e2e', () => {
     await page.goto('/admin');
 
     await page.getByTestId('admin-user-search').fill(targetUser.username);
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
     await expect(page.getByTestId('admin-users-results')).toContainText(targetUser.username);
+    await expect(page.getByTestId('admin-users-results')).toContainText(targetUser.email);
+
+    await page.locator('#userStatusFilter').selectOption('active');
+    await page.locator('#userDirectoryFilter').selectOption('off');
+    await page.locator('#userAvatarFilter').selectOption('yes');
+    await expect(page.getByTestId('admin-users-results')).toContainText(targetUser.username);
+    await page.locator('#userAvatarFilter').selectOption('');
 
     await page.getByRole('button', { name: 'Remove Avatar' }).first().click();
     await page.getByTestId('admin-reason-input').fill('Avatar violation');

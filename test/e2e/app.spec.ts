@@ -60,6 +60,7 @@ test.describe('wyvern shell e2e', () => {
     await page.getByTestId('message-composer-input').fill(serverMessage);
     await page.getByTestId('message-send-button').click();
     await expect(page.getByText(serverMessage)).toBeVisible();
+    await expect(page.getByText(serverMessage, { exact: true })).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Open Server Settings' }).click();
     await page.getByRole('button', { name: 'Moderation' }).click();
@@ -80,6 +81,7 @@ test.describe('wyvern shell e2e', () => {
     await page.getByTestId('message-composer-input').fill(dmMessage);
     await page.getByTestId('message-send-button').click();
     await expect(page.getByText(dmMessage)).toBeVisible();
+    await expect(page.getByText(dmMessage, { exact: true })).toHaveCount(1);
 
     await page.getByTestId('settings-open-trigger').first().click();
     await expect(page.getByTestId('settings-hub-modal')).toBeVisible();

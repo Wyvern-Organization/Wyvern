@@ -721,6 +721,8 @@ describe('wyvern workers api', () => {
 
   it('enforces moderation actions and revokes profile media through admin endpoints', async () => {
     env.ADMIN_ALLOWLIST = 'admin#0001';
+    env.SMTP2GO_API_KEY = 'smtp-test-key';
+    env.SMTP2GO_DEFAULT_FROM = 'noreply@wyvernhub.net';
     const adminToken = await registerAndToken('admin');
     const memberRegister = await api('/api/v1/auth/register', {
       method: 'POST',
@@ -735,6 +737,10 @@ describe('wyvern workers api', () => {
     env.__APP_STATE__!.users[memberId].email_verified_at = verifiedAt;
     env.__APP_STATE__!.emailVerifications[memberId].status = 'verified';
     env.__APP_STATE__!.emailVerifications[memberId].verified_at = verifiedAt;
+    const smtpFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      result: 'success',
+      data: { email_id: 'moderation-notice' },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
 
     const form = new FormData();
     form.set('file', new File(['avatar bytes'], 'avatar.png', { type: 'image/png' }));
@@ -795,6 +801,31 @@ describe('wyvern workers api', () => {
     const publicDeleteBody = await publicAfterDelete.json() as { data: { username: string; deleted: boolean } };
     expect(publicDeleteBody.data.username).toBe('deleted-user');
     expect(publicDeleteBody.data.deleted).toBe(true);
+
+    const targetTag = `${env.__APP_STATE__!.users[memberId].username}#${env.__APP_STATE__!.users[memberId].discriminator}`;
+    const incompleteHardDelete = await api(`/api/v1/admin/users/${memberId}/actions/hard-delete`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'permanent policy removal', confirmations: { acknowledge_irreversible: true, target: targetTag, phrase: 'DELETE' } }),
+    });
+    expect(incompleteHardDelete.status).toBe(400);
+
+    const hardDelete = await api(`/api/v1/admin/users/${memberId}/actions/hard-delete`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'permanent policy removal', confirmations: { acknowledge_irreversible: true, target: targetTag, phrase: 'HARD DELETE' } }),
+    });
+    expect(hardDelete.status).toBe(200);
+    expect((await hardDelete.json() as { data: { deleted: boolean; user_id: string } }).data).toEqual({ deleted: true, user_id: memberId });
+    expect(env.__APP_STATE__!.users[memberId]).toBeUndefined();
+    expect(Object.values(env.__APP_STATE__!.refreshTokens).some((token) => token.user_id === memberId)).toBe(false);
+    expect((await api(`/api/v1/users/${memberId}`)).status).toBe(404);
+    const notices = smtpFetch.mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit)?.body || '{}')));
+    expect(notices).toHaveLength(5);
+    expect(notices.every((notice) => notice.to?.[0] === 'member@example.com')).toBe(true);
+    expect(notices.some((notice) => notice.subject === 'Wyvern account notice: suspended')).toBe(true);
+    expect(notices.some((notice) => notice.subject === 'Wyvern account notice: permanently deleted')).toBe(true);
+    smtpFetch.mockRestore();
   });
 
   it('creates retrievable media urls for uploads', async () => {

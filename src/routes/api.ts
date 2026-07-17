@@ -38,6 +38,14 @@ const wyvGrantSchema = z.object({ grant: z.string().min(1) });
 const wyvTokenIntrospectSchema = z.object({ token: z.string().min(1) });
 const scanResultSchema = z.object({ upload_id: z.string().min(1), verdict: z.enum(['clean', 'infected', 'error']), error: z.string().max(1000).nullish() });
 const adminModerationActionSchema = z.object({ reason: z.string().trim().max(1000).nullish() });
+const adminHardDeleteSchema = z.object({
+  reason: z.string().trim().min(1).max(1000),
+  confirmations: z.object({
+    acknowledge_irreversible: z.literal(true),
+    target: z.string().trim().min(1).max(200),
+    phrase: z.literal('HARD DELETE'),
+  }),
+});
 const adminProfileRemovalSchema = z.object({
   fields: z.array(z.enum(['display_name', 'bio', 'avatar'])).min(1),
   reason: z.string().trim().max(1000).nullish(),
@@ -717,6 +725,32 @@ function addModerationAudit(
   return audit;
 }
 
+async function notifyPlatformModeration(env: Env, user: UserRecord, action: string, reason: string | null) {
+  if (!getConfig(env).smtp2goApiKey) return;
+  const labels: Record<string, string> = {
+    suspend: 'suspended',
+    unsuspend: 'restored',
+    ban: 'banned',
+    unban: 'restored',
+    soft_delete: 'deleted',
+    hard_delete: 'permanently deleted',
+    restore: 'restored',
+    profile_redaction: 'changed',
+  };
+  const label = labels[action] || 'changed';
+  try {
+    await sendViaSmtp2go(env, {
+      from_address: getConfig(env).smtp2goDefaultFrom,
+      from_name: getConfig(env).smtp2goDefaultFromName || 'Wyvern',
+      to: [user.email],
+      subject: `Wyvern account notice: ${label}`,
+      text_body: `Your Wyvern account has been ${label} by platform moderation.\n\nReason: ${reason || 'No reason provided.'}`,
+    });
+  } catch {
+    // Moderation remains effective when notification provider unavailable.
+  }
+}
+
 function listUserModerationHistory(state: RepositoryState, userId: string): ModerationAuditRecord[] {
   return Object.values(state.moderationAudits)
     .filter((item) => item.user_id === userId)
@@ -738,6 +772,73 @@ async function revokeProfileAvatar(repo: RepositoryHandle, env: Env, user: UserR
   await deleteMediaBytes(env, media);
   delete repo.state.mediaObjects[media.id];
   return media;
+}
+
+function deleteMatchingRecords<T>(records: Record<string, T>, matches: (record: T) => boolean) {
+  for (const [id, record] of Object.entries(records)) {
+    if (matches(record)) delete records[id];
+  }
+}
+
+async function hardDeleteUser(repo: RepositoryHandle, env: Env, user: UserRecord) {
+  const userId = user.id;
+  const ownedServers = Object.values(repo.state.servers).filter((server) => server.owner_id === userId);
+  if (ownedServers.length) {
+    return `Transfer or remove the user's ${ownedServers.length} owned server${ownedServers.length === 1 ? '' : 's'} before permanently deleting this account`;
+  }
+
+  const userMessages = new Set(Object.values(repo.state.messages).filter((message) => message.author_id === userId).map((message) => message.id));
+  const privateDocuments = new Set(Object.values(repo.state.workspaceDocuments)
+    .filter((document) => document.owner_user_id === userId)
+    .map((document) => document.id));
+  const privateRepositories = new Set(Object.values(repo.state.workspaceGitRepositories)
+    .filter((repository) => privateDocuments.has(repository.document_id))
+    .map((repository) => repository.id));
+
+  for (const media of listUserMedia(repo.state, userId)) {
+    await deleteMediaBytes(env, media);
+    delete repo.state.mediaObjects[media.id];
+  }
+
+  delete repo.state.users[userId];
+  delete repo.state.emailVerifications[userId];
+  delete repo.state.userModerationRecords[userId];
+  deleteMatchingRecords(repo.state.refreshTokens, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.apiTokens, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.stripeSubscriptions, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.usageLedgerEntries, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.serverMembers, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.serverInvites, (item) => item.created_by === userId);
+  deleteMatchingRecords(repo.state.dmParticipants, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.dmHiddenStates, (item) => item.user_id === userId);
+  deleteMatchingRecords(repo.state.messages, (item) => item.author_id === userId);
+  for (const message of Object.values(repo.state.messages)) {
+    if (message.reply_to_id && userMessages.has(message.reply_to_id)) message.reply_to_id = null;
+  }
+  deleteMatchingRecords(repo.state.reactions, (item) => item.user_id === userId || userMessages.has(item.message_id));
+  deleteMatchingRecords(repo.state.messageBookmarks, (item) => item.user_id === userId || userMessages.has(item.message_id));
+  deleteMatchingRecords(repo.state.channelReadStates, (item) => item.user_id === userId);
+  for (const webhook of Object.values(repo.state.webhooks)) if (webhook.created_by === userId) webhook.created_by = null;
+  deleteMatchingRecords(repo.state.workspaceDocuments, (item) => privateDocuments.has(item.id));
+  for (const document of Object.values(repo.state.workspaceDocuments)) {
+    if (document.updated_by_user_id === userId) document.updated_by_user_id = null;
+  }
+  deleteMatchingRecords(repo.state.workspaceRevisions, (item) => privateDocuments.has(item.document_id) || item.editor_user_id === userId);
+  deleteMatchingRecords(repo.state.workspaceGitRepositories, (item) => privateDocuments.has(item.document_id));
+  deleteMatchingRecords(repo.state.workspaceGitCommits, (item) => privateRepositories.has(item.repository_id));
+  for (const commit of Object.values(repo.state.workspaceGitCommits)) {
+    if (commit.author_user_id === userId) {
+      commit.author_user_id = null;
+      commit.author_name = 'Deleted user';
+    }
+  }
+  deleteMatchingRecords(repo.state.workspaceGitCredentials, (item) => item.user_id === userId || privateRepositories.has(item.repository_id));
+  deleteMatchingRecords(repo.state.workspaceGitObjects, (item) => privateRepositories.has(item.repository_id));
+  deleteMatchingRecords(repo.state.communityActivities, (item) => item.actor_user_id === userId);
+  deleteMatchingRecords(repo.state.moderationAudits, (item) => item.user_id === userId || item.actor_user_id === userId);
+  deleteMatchingRecords(repo.state.realtimeEvents, (item) => item.user_id === userId);
+  delete repo.state.uiVariantVotes[userId];
+  return null;
 }
 
 async function requireAdminRepo(c: AppContext): Promise<Response | { auth: AuthenticatedUser; repo: RepositoryHandle; user: UserRecord }> {
@@ -3702,6 +3803,7 @@ export function buildApiRouter() {
     revokeUserRefreshTokens(admin.repo.state, target.id);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'suspend', payload.reason?.trim() || null);
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'suspend', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
   });
 
@@ -3715,6 +3817,7 @@ export function buildApiRouter() {
     applyUserModerationState(record, 'active', admin.auth.user_id, payload.reason?.trim() || null);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'unsuspend', payload.reason?.trim() || null);
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'unsuspend', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
   });
 
@@ -3729,6 +3832,7 @@ export function buildApiRouter() {
     revokeUserRefreshTokens(admin.repo.state, target.id);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'ban', payload.reason?.trim() || null);
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'ban', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
   });
 
@@ -3742,6 +3846,7 @@ export function buildApiRouter() {
     applyUserModerationState(record, 'active', admin.auth.user_id, payload.reason?.trim() || null);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'unban', payload.reason?.trim() || null);
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'unban', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
   });
 
@@ -3762,7 +3867,36 @@ export function buildApiRouter() {
     revokeUserRefreshTokens(admin.repo.state, target.id);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'soft_delete', payload.reason?.trim() || null, { anonymized_messages: true });
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'soft_delete', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
+  });
+
+  api.post('/admin/users/:userId/actions/hard-delete', async (c) => {
+    const admin = await requireAdminRepo(c);
+    if (admin instanceof Response) return admin;
+    const parsed = adminHardDeleteSchema.safeParse(await c.req.json());
+    if (!parsed.success) return errorResponse('BAD_REQUEST', 'Hard delete requires all three confirmations and an audit reason', 400);
+    const payload = parsed.data;
+    const target = admin.repo.state.users[c.req.param('userId')];
+    if (!target) return errorResponse('NOT_FOUND', 'User not found', 404);
+    if (target.id === admin.auth.user_id) return errorResponse('BAD_REQUEST', 'Administrators cannot permanently delete their own account from moderation', 400);
+    const targetTag = `${target.username}#${target.discriminator}`;
+    if (payload.confirmations.target !== targetTag) {
+      return errorResponse('BAD_REQUEST', 'Hard-delete confirmation must name the exact target account', 400);
+    }
+    const ownedServerCount = Object.values(admin.repo.state.servers).filter((server) => server.owner_id === target.id).length;
+    if (ownedServerCount) {
+      return errorResponse('CONFLICT', `Transfer or remove the user's ${ownedServerCount} owned server${ownedServerCount === 1 ? '' : 's'} before permanently deleting this account`, 409);
+    }
+    await notifyPlatformModeration(c.env, target, 'hard_delete', payload.reason);
+    const blockedReason = await hardDeleteUser(admin.repo, c.env, target);
+    if (blockedReason) return errorResponse('CONFLICT', blockedReason, 409);
+    addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'hard_delete', payload.reason, {
+      permanently_deleted: true,
+      target_tag: targetTag,
+    });
+    await admin.repo.save();
+    return successResponse({ deleted: true, user_id: target.id });
   });
 
   api.post('/admin/users/:userId/actions/restore', async (c) => {
@@ -3775,6 +3909,7 @@ export function buildApiRouter() {
     applyUserModerationState(record, 'active', admin.auth.user_id, payload.reason?.trim() || null);
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'restore', payload.reason?.trim() || null);
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'restore', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target) });
   });
 
@@ -3806,6 +3941,7 @@ export function buildApiRouter() {
     record.reason = payload.reason?.trim() || null;
     addModerationAudit(admin.repo, target.id, admin.auth.user_id, 'profile_redaction', payload.reason?.trim() || null, { fields: removed });
     await admin.repo.save();
+    await notifyPlatformModeration(c.env, target, 'profile_redaction', payload.reason?.trim() || null);
     return successResponse({ user: buildAdminUserSummary(admin.repo.state, target), removed_fields: removed });
   });
 
@@ -4369,7 +4505,7 @@ async function requestMalwareScan(env: Env, origin: string, media: MediaObjectRe
     }
   }
 }
-function serializeAdminUser(user: UserRecord, state?: RepositoryState) { const moderation = state ? getModerationRecord(state, user.id) : defaultModerationRecord(user.id); return { id: user.id, username: user.username, discriminator: user.discriminator, display_name: user.display_name, bio: user.bio, directory_opt_in: user.directory_opt_in, avatar: user.avatar, is_paid: user.is_paid, created_at: user.created_at, moderation: serializeModerationRecord(moderation) }; }
+function serializeAdminUser(user: UserRecord, state?: RepositoryState) { const moderation = state ? getModerationRecord(state, user.id) : defaultModerationRecord(user.id); return { id: user.id, username: user.username, discriminator: user.discriminator, display_name: user.display_name, bio: user.bio, directory_opt_in: user.directory_opt_in, email: user.email, avatar: user.avatar, is_paid: user.is_paid, created_at: user.created_at, moderation: serializeModerationRecord(moderation) }; }
 function isAdmin(user: UserRecord, env: Env) { return getConfig(env).adminAllowlist.includes(`${user.username}#${user.discriminator}`); }
 function serializeWyvUser(user: UserRecord) { return { user_id: user.id, sync_id: null, username: user.username, discriminator: user.discriminator, display_name: user.display_name, email: user.email, avatar: user.avatar, bio: user.bio, directory_opt_in: user.directory_opt_in, ai_opt_in: user.ai_opt_in, nsfw_18_verified: user.nsfw_18_verified }; }
 function listReleaseFlags(repo: Awaited<ReturnType<typeof loadRepository>>): ReleaseFlagRecord[] {
