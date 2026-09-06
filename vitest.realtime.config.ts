@@ -6,6 +6,8 @@ export default defineWorkersConfig({
     exclude: ['node_modules/**'],
     poolOptions: {
       workers: {
+        isolatedStorage: false,
+        singleWorker: true,
         wrangler: { configPath: './wrangler.realtime-test.jsonc' }
       }
     }

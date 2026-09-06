@@ -3,3 +3,7 @@ node_modules/
 .dev.vars
 *.log
 coverage/
+playwright-report/
+test-results/
+.migration-archives/
+__pycache__/

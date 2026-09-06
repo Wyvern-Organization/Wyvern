@@ -12,8 +12,7 @@
   ],
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS",
-    "run_worker_first": true
+    "binding": "ASSETS"
   },
   "r2_buckets": [
     {
@@ -28,13 +27,10 @@
   "observability": {
     "enabled": true
   },
-  "triggers": {
-    "crons": ["0 3 * * *"]
-  },
   "vars": {
     "APP_NAME": "Wyvern Workers",
     "API_V1_PREFIX": "/api/v1",
-    "ENVIRONMENT": "production",
+    "ENVIRONMENT": "development",
     "ACCESS_TOKEN_EXPIRE_MINUTES": "15",
     "REFRESH_TOKEN_EXPIRE_DAYS": "30",
     "CORS_ORIGINS": "https://wyvernhub.net,https://app.wyvernhub.net",
@@ -48,13 +44,10 @@
     "EMAIL_VERIFICATION_RESEND_SECONDS": "60",
     "EMAIL_VERIFICATION_REQUEST_LIMIT": "5",
     "EMAIL_VERIFICATION_RATE_LIMIT_WINDOW_MINUTES": "60",
-    "EMAIL_VERIFICATION_REQUIRED_VERSION": "1",
     "STRIPE_PRICE_ID": "",
     "STRIPE_SUCCESS_URL": "",
     "STRIPE_CANCEL_URL": "",
     "STRIPE_PORTAL_RETURN_URL": "",
-    "SUBSCRIPTIONS_ENABLED": "false",
-    "UNIVERSAL_PREMIUM_ACCESS": "true",
     "REGISTRATION_ENABLED": "true",
     "MAINTENANCE_MODE": "false",
     "MAINTENANCE_MESSAGE": "",

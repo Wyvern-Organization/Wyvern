@@ -4119,6 +4119,48 @@
       background: rgba(231, 76, 60, 0.3);
     }
 
+    .voice-btn.is-muted {
+      border-color: rgba(255, 194, 75, 0.58);
+      background: rgba(255, 194, 75, 0.12);
+      color: #ffe0a1;
+    }
+
+    .voice-live-status {
+      width: fit-content;
+      margin-top: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border: 1px solid rgba(46, 204, 113, 0.32);
+      border-radius: 999px;
+      background: rgba(46, 204, 113, 0.1);
+      color: #9bf5c3;
+      font-family: var(--font-head);
+      font-size: 10px;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+    }
+
+    .voice-live-dot,
+    .voice-call-incoming-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #57e394;
+      box-shadow: 0 0 0 0 rgba(87, 227, 148, 0.56);
+      animation: callPulse 1.7s ease-out infinite;
+    }
+
+    .voice-live-count {
+      padding-left: 2px;
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
     .voice-panel {
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 20px;
@@ -4227,6 +4269,161 @@
       font-family: var(--font-head);
       letter-spacing: 0.6px;
       text-transform: uppercase;
+    }
+
+    .voice-muted-label {
+      margin-left: 6px;
+      color: #ffe0a1;
+      font-size: 10px;
+      font-family: var(--font-head);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    .voice-channel-presence,
+    .dm-call-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+      padding: 2px 6px;
+      border: 1px solid rgba(87, 227, 148, 0.28);
+      border-radius: 999px;
+      background: rgba(87, 227, 148, 0.1);
+      color: #9bf5c3;
+      font-family: var(--font-head);
+      font-size: 9px;
+      line-height: 1;
+      letter-spacing: 0.35px;
+    }
+
+    .voice-channel-presence .ui-icon,
+    .dm-call-state .ui-icon {
+      width: 12px;
+      height: 12px;
+    }
+
+    .voice-call-incoming-dot {
+      flex-shrink: 0;
+      background: #ffd166;
+    }
+
+    .dm-call-state.incoming,
+    .topbar-btn.call-incoming {
+      color: #ffe0a1;
+      border-color: rgba(255, 209, 102, 0.46);
+      background: rgba(255, 209, 102, 0.12);
+    }
+
+    .dm-call-state.calling,
+    .topbar-btn.call-calling {
+      color: #aeeaff;
+      border-color: rgba(0, 200, 255, 0.46);
+      background: rgba(0, 200, 255, 0.12);
+    }
+
+    .topbar-btn.call-connected,
+    .topbar-btn.call-active {
+      color: #9bf5c3;
+      border-color: rgba(87, 227, 148, 0.44);
+      background: rgba(87, 227, 148, 0.12);
+    }
+
+    .incoming-call-notice {
+      position: fixed;
+      z-index: 3100;
+      right: 20px;
+      bottom: 20px;
+      width: min(390px, calc(100vw - 32px));
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(0, 200, 255, 0.42);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(8, 23, 35, 0.98), rgba(18, 18, 34, 0.98));
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.48);
+      backdrop-filter: blur(18px);
+      animation: incomingCallIn 0.22s ease-out both;
+    }
+
+    .incoming-call-pulse {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      border-radius: 50%;
+      color: #b9f2ff;
+      background: rgba(0, 200, 255, 0.18);
+      box-shadow: 0 0 0 0 rgba(0, 200, 255, 0.45);
+      animation: callPulse 1.45s ease-out infinite;
+    }
+
+    .incoming-call-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .incoming-call-eyebrow {
+      color: var(--hover);
+      font-family: var(--font-head);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .incoming-call-title {
+      margin-top: 2px;
+      overflow: hidden;
+      color: var(--text);
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .incoming-call-subtitle {
+      margin-top: 3px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .incoming-call-actions {
+      display: flex;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .incoming-call-btn {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .incoming-call-btn.decline {
+      border-color: rgba(231, 76, 60, 0.52);
+      background: rgba(231, 76, 60, 0.14);
+      color: #ffb8af;
+    }
+
+    .incoming-call-btn.accept {
+      border-color: rgba(46, 204, 113, 0.58);
+      background: rgba(46, 204, 113, 0.18);
+      color: #a5f5c7;
+    }
+
+    @keyframes callPulse {
+      0% { box-shadow: 0 0 0 0 currentColor; }
+      70% { box-shadow: 0 0 0 11px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+
+    @keyframes incomingCallIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .voice-empty {
@@ -4733,6 +4930,31 @@
         --header-h: 52px;
       }
 
+      .auth-view {
+        align-items: flex-start;
+        justify-content: flex-start;
+        overflow-y: auto;
+        padding: 16px 12px;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .auth-card,
+      .auth-card.legal-card {
+        width: 100%;
+        max-width: 420px;
+        margin: auto 0;
+        padding: 28px 20px;
+      }
+
+      .auth-title {
+        font-size: 28px;
+      }
+
+      .auth-switch {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
       #app {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 10%),
@@ -4741,6 +4963,37 @@
 
       .app-layout {
         grid-template-rows: auto auto minmax(50vh, 1fr);
+      }
+
+      .chat-main-stage {
+        padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+      }
+
+      .chat-input-area {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      .chat-input-box {
+        gap: 4px;
+        padding: 6px 8px;
+        border-radius: 18px;
+      }
+
+      .chat-textarea {
+        min-width: 0;
+        min-height: 40px;
+        font-size: 16px;
+      }
+
+      .input-icon-btn,
+      .send-btn {
+        width: 36px;
+        height: 36px;
+      }
+
+      .input-pill-btn {
+        min-width: 42px;
+        padding: 0 8px;
       }
 
       .modal,
@@ -5143,5 +5396,414 @@
         top: 10px;
         right: 10px;
         bottom: 10px;
+      }
+    }
+
+    /* ── Launch safety, billing, and moderation ── */
+    .verification-banner {
+      position: fixed;
+      z-index: 2500;
+      /* Keep the persistent prompt below the app's header controls so it
+         never blocks server settings, search, or member actions. */
+      top: 94px;
+      left: 50%;
+      width: min(980px, calc(100vw - 32px));
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 13px 15px 13px 18px;
+      border: 1px solid rgba(255, 194, 75, 0.42);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(61, 45, 10, 0.98), rgba(23, 24, 18, 0.98));
+      box-shadow: 0 20px 54px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(16px);
+      /* The prompt is persistent, but its empty/text area must not turn into
+         a glass pane over channel and server controls beneath it. */
+      pointer-events: none;
+    }
+
+    /* The login gate reuses the code-entry controls without leaving the
+       unverified account behind the normal application shell. */
+    .verification-gate-card {
+      width: min(520px, calc(100vw - 32px));
+    }
+
+    .verification-gate-panel {
+      position: static;
+      z-index: auto;
+      width: 100%;
+      transform: none;
+      align-items: stretch;
+      flex-direction: column;
+      gap: 12px;
+      margin: 18px 0;
+      pointer-events: auto;
+    }
+
+    .verification-gate-panel .verification-banner-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      width: 100%;
+    }
+
+    .verification-gate-panel .verification-code-input {
+      width: 100%;
+    }
+
+    .verification-banner-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .verification-banner-title,
+    .billing-plan-name,
+    .billing-limits-title,
+    .moderation-report-title,
+    .moderation-member-name,
+    .moderation-history-title {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .verification-banner-title {
+      font-size: 14px;
+    }
+
+    .verification-status {
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .verification-status.is-error {
+      color: #ffaaa2;
+    }
+
+    .verification-banner-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+      pointer-events: auto;
+    }
+
+    .verification-code-input {
+      width: 122px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 11px;
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      text-align: center;
+      font-family: var(--font-head);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+    }
+
+    .verification-code-input:focus {
+      outline: none;
+      border-color: rgba(255, 210, 104, 0.9);
+      box-shadow: 0 0 0 3px rgba(255, 202, 81, 0.16);
+    }
+
+    .profile-modal-head,
+    .billing-plan-head,
+    .moderation-card-head,
+    .moderation-member-row,
+    .moderation-history-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .profile-modal-head {
+      margin-bottom: 16px;
+    }
+
+    .profile-modal-avatar {
+      border: 1px solid rgba(124, 236, 255, 0.32);
+      box-shadow: 0 0 0 4px rgba(124, 236, 255, 0.08);
+    }
+
+    .profile-modal-copy {
+      min-width: 0;
+    }
+
+    .profile-modal-tag,
+    .profile-modal-presence,
+    .moderation-report-meta,
+    .moderation-member-meta,
+    .moderation-history-meta {
+      margin-top: 3px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .profile-modal-bio {
+      min-height: 62px;
+      padding: 13px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      color: var(--text-2);
+      background: rgba(255, 255, 255, 0.025);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .profile-modal-bio.is-empty {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .profile-premium-badge {
+      align-self: flex-start;
+      margin-top: 12px;
+      padding: 5px 9px;
+      border: 1px solid rgba(255, 207, 94, 0.42);
+      border-radius: 999px;
+      background: rgba(255, 197, 58, 0.12);
+      color: #ffe6a7;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .member-profile-trigger {
+      cursor: pointer;
+      border-radius: 9px;
+    }
+
+    .member-profile-trigger:focus-visible {
+      outline: 2px solid var(--hover);
+      outline-offset: 2px;
+    }
+
+    .billing-plan-card.is-premium {
+      border-color: rgba(255, 207, 94, 0.25);
+      background: linear-gradient(135deg, rgba(255, 194, 74, 0.1), rgba(255, 255, 255, 0.025));
+    }
+
+    .premium-accent-input {
+      min-height: 44px;
+      padding: 5px;
+      cursor: pointer;
+    }
+
+    .billing-plan-head,
+    .moderation-card-head {
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .billing-price {
+      color: #fff0c4;
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .billing-price span {
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .moderation-section-stack,
+    .moderation-report-list,
+    .moderation-member-list,
+    .moderation-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .moderation-card {
+      gap: 14px;
+    }
+
+    .moderation-empty {
+      padding: 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 13px;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .moderation-report-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.75fr);
+      gap: 14px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .moderation-report-row.status-open {
+      border-left: 3px solid rgba(255, 194, 75, 0.78);
+    }
+
+    .moderation-report-row.status-in_review {
+      border-left: 3px solid rgba(124, 236, 255, 0.76);
+    }
+
+    .moderation-report-row.status-actioned {
+      border-left: 3px solid rgba(85, 219, 153, 0.78);
+    }
+
+    .moderation-report-row.status-dismissed {
+      border-left: 3px solid rgba(255, 255, 255, 0.24);
+    }
+
+    .moderation-report-main,
+    .moderation-report-controls,
+    .moderation-member-main {
+      min-width: 0;
+    }
+
+    .moderation-report-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .moderation-resolution-input {
+      min-height: 38px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .moderation-note-input {
+      min-height: 70px;
+      padding: 9px 10px;
+      font-size: 12px;
+    }
+
+    .moderation-report-details {
+      margin-top: 9px;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .moderation-report-notes {
+      margin-top: 8px;
+      color: var(--hover);
+      font-size: 11px;
+    }
+
+    .moderation-member-search {
+      min-height: 40px;
+      padding: 9px 11px;
+    }
+
+    .moderation-member-row,
+    .moderation-history-row {
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .moderation-member-main {
+      flex: 1;
+    }
+
+    .moderation-member-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .moderation-history-row {
+      display: block;
+    }
+
+    .maintenance-card {
+      max-width: 510px;
+    }
+
+    .maintenance-kicker {
+      margin: 8px 0 6px;
+      color: #ffe0a1;
+      font-family: var(--font-head);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .maintenance-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .maintenance-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ffd166;
+      box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.14);
+    }
+
+    @media (max-width: 720px) {
+      .verification-banner {
+        top: 72px;
+        width: calc(100vw - 16px);
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .verification-banner-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+      }
+
+      .verification-gate-card {
+        width: min(100%, calc(100vw - 20px));
+      }
+
+      .verification-code-input {
+        width: 100%;
+      }
+
+      .moderation-report-row {
+        grid-template-columns: 1fr;
+      }
+
+      .moderation-card-head,
+      .billing-plan-head,
+      .moderation-member-row {
+        align-items: flex-start;
+      }
+
+      .moderation-member-row {
+        flex-wrap: wrap;
+      }
+
+      .moderation-member-actions {
+        width: 100%;
+        justify-content: flex-end;
       }
     }

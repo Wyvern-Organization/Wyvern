@@ -9,6 +9,11 @@ export async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('');
 }
 
+export async function sha1Bytes(value: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', value);
+  return Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('');
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
@@ -86,6 +91,25 @@ export async function verifyBridgeSignature(secret: string, body: ArrayBuffer, t
   if (expected !== signature) {
     throw new Error('Invalid bridge signature');
   }
+}
+
+export async function signBridgePayload(secret: string, body: ArrayBuffer, timestamp = String(Math.floor(Date.now() / 1000))): Promise<{ timestamp: string; signature: string }> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const data = new Uint8Array(timestamp.length + 1 + body.byteLength);
+  data.set(encoder.encode(timestamp));
+  data.set(encoder.encode('.'), timestamp.length);
+  data.set(new Uint8Array(body), timestamp.length + 1);
+  const signature = await crypto.subtle.sign('HMAC', key, data);
+  return {
+    timestamp,
+    signature: Array.from(new Uint8Array(signature)).map((item) => item.toString(16).padStart(2, '0')).join(''),
+  };
 }
 
 export async function decodeWyvHandoffGrant(secret: string, grant: string): Promise<any> {

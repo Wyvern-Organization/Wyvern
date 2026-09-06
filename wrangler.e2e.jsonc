@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wyvern-workers-e2e",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-06",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "APP_NAME": "Wyvern Workers",
+    "API_V1_PREFIX": "/api/v1",
+    "ENVIRONMENT": "e2e",
+    "ACCESS_TOKEN_EXPIRE_MINUTES": "15",
+    "REFRESH_TOKEN_EXPIRE_DAYS": "30",
+    "CORS_ORIGINS": "*",
+    "MEDIA_PUBLIC_BASE_URL": "/media",
+    "ADMIN_ALLOWLIST": "e2eadmin#0001,e2eadmin#0002,e2eadmin#0003,e2eadmin#0004,e2eadmin#0005,e2eadmin#0006,e2eadmin#0007,e2eadmin#0008,e2eadmin#0009,e2eadmin#0010,e2eadmin#0011,e2eadmin#0012,e2eadmin#0013,e2eadmin#0014,e2eadmin#0015,e2eadmin#0016,e2eadmin#0017,e2eadmin#0018,e2eadmin#0019,e2eadmin#0020,e2eadmin#0021,e2eadmin#0022,e2eadmin#0023,e2eadmin#0024,e2eadmin#0025,e2eadmin#0026,e2eadmin#0027,e2eadmin#0028,e2eadmin#0029,e2eadmin#0030,e2eadmin#0031,e2eadmin#0032,e2eadmin#0033,e2eadmin#0034,e2eadmin#0035,e2eadmin#0036,e2eadmin#0037,e2eadmin#0038,e2eadmin#0039,e2eadmin#0040,e2eadmin#0041,e2eadmin#0042,e2eadmin#0043,e2eadmin#0044,e2eadmin#0045,e2eadmin#0046,e2eadmin#0047,e2eadmin#0048,e2eadmin#0049,e2eadmin#0050,e2eadmin#0051,e2eadmin#0052,e2eadmin#0053,e2eadmin#0054,e2eadmin#0055,e2eadmin#0056,e2eadmin#0057,e2eadmin#0058,e2eadmin#0059,e2eadmin#0060,e2eadmin#0061,e2eadmin#0062,e2eadmin#0063,e2eadmin#0064,e2eadmin#0065,e2eadmin#0066,e2eadmin#0067,e2eadmin#0068,e2eadmin#0069,e2eadmin#0070,e2eadmin#0071,e2eadmin#0072,e2eadmin#0073,e2eadmin#0074,e2eadmin#0075,e2eadmin#0076,e2eadmin#0077,e2eadmin#0078,e2eadmin#0079,e2eadmin#0080,e2eadmin#0081,e2eadmin#0082,e2eadmin#0083,e2eadmin#0084,e2eadmin#0085,e2eadmin#0086,e2eadmin#0087,e2eadmin#0088,e2eadmin#0089,e2eadmin#0090,e2eadmin#0091,e2eadmin#0092,e2eadmin#0093,e2eadmin#0094,e2eadmin#0095,e2eadmin#0096,e2eadmin#0097,e2eadmin#0098,e2eadmin#0099,e2eadmin#0100",
+    "MAIL_WORKER_SECRET": "e2e-mail-secret",
+    "E2E_REALTIME_CLOSE_MS": "500"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PRESENCE_ROOM",
+        "class_name": "PresenceRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["PresenceRoom"]
+    }
+  ]
+}

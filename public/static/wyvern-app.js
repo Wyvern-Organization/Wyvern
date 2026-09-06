@@ -30,6 +30,10 @@
       giphy_rating: 'g',
       giphy_limit: 24,
       bridge_health: null,
+      runtime_controls: {
+        maintenance_mode: false,
+        maintenance_message: '',
+      },
       legal: {
         terms_version: '2026-05-22',
         privacy_version: '2026-05-22',
@@ -60,6 +64,56 @@
 
     function featureFlagEnabled(key) {
       return !!runtimeConfig?.feature_flags?.[key];
+    }
+
+    function runtimeControls() {
+      return runtimeConfig?.runtime_controls || {};
+    }
+
+    function maintenanceModeEnabled() {
+      return !!runtimeControls().maintenance_mode;
+    }
+
+    function maintenanceMessage() {
+      return String(runtimeControls().maintenance_message || '').trim()
+        || 'Wyvern is briefly undergoing maintenance. Please check back soon.';
+    }
+
+    function isEmailVerified(user = store?.state?.user) {
+      return Boolean(user?.email_verified_at || user?.email_verified === true || user?.is_email_verified === true);
+    }
+
+    function isPremiumEntitled(user = store?.state?.user) {
+      const entitlement = user?.premium_entitlement || {};
+      const status = String(entitlement?.status || entitlement?.subscription_status || '').toLowerCase();
+      return Boolean(
+        user?.is_paid
+        || entitlement?.is_paid
+        || entitlement?.is_premium
+        || entitlement?.premium
+        || ['active', 'trialing', 'grace_period'].includes(status)
+      );
+    }
+
+    function maintenanceAppliesTo(user = null) {
+      return maintenanceModeEnabled() && !user?.is_admin;
+    }
+
+    function runtimeControlEnabled(name) {
+      const key = name === 'registration' ? 'registrations' : name;
+      return runtimeControls()[`${key}_enabled`] !== false;
+    }
+
+    function runtimeControlUnavailableMessage(name) {
+      return ({
+        registration: 'Registration is temporarily unavailable.',
+        uploads: 'Uploads are temporarily disabled by Wyvern staff.',
+        webhooks: 'Webhooks are temporarily disabled by Wyvern staff.',
+        community_tools: 'Community tools are temporarily disabled by Wyvern staff.',
+        workspaces: 'Workspaces are temporarily disabled by Wyvern staff.',
+        voice: 'Voice is temporarily disabled by Wyvern staff.',
+        ai: 'AI features are not available right now.',
+      })[name] || 'This feature is temporarily unavailable.';
     }
 
     function shellRefreshEnabled() {
@@ -117,7 +171,10 @@
     }
 
     function websocketPath() {
-      return currentClientMode() === 'edge' ? '/edge/ws' : '/ws';
+      // The realtime routes live under the same API mount as the rest of the
+      // Worker. Keeping this derived from apiPrefix also prevents stable and
+      // edge clients from attempting a non-existent root-level /ws endpoint.
+      return `${apiPrefix()}/ws`;
     }
 
     function idKey(value) {
@@ -141,7 +198,8 @@
     }
 
     function edgeModeCanBoot() {
-      return runtimeConfig?.client_mode !== 'edge' && !!runtimeConfig?.edge_mode_available && !!runtimeConfig?.edge_mode_enabled;
+      if (runtimeConfig?.client_mode === 'edge') return false;
+      return !!runtimeConfig?.edge_mode_available && !!runtimeConfig?.edge_mode_enabled;
     }
 
     function resolveAuthedView() {
@@ -175,6 +233,11 @@
     }
 
     function resolvePostAuthView(user) {
+      // Email verification is an account gate, not an optional in-app prompt.
+      // Keep an unverified session limited to the verification flow until the
+      // server confirms the account's current verification policy is met.
+      if (user && !isEmailVerified(user)) return 'verification';
+      if (maintenanceAppliesTo(user)) return 'maintenance';
       return user?.legal_reaccept_required ? 'legal' : resolveAuthedView();
     }
 
@@ -191,6 +254,7 @@
         const data = payload?.data || payload || {};
         runtimeConfig = { ...runtimeConfig, ...data };
         runtimeConfig.feature_flags = { ...(runtimeConfig.feature_flags || {}), ...(data.feature_flags || {}) };
+        runtimeConfig.runtime_controls = { ...(runtimeConfig.runtime_controls || {}), ...(data.runtime_controls || {}) };
         runtimeConfig.legal = { ...(runtimeConfig.legal || {}), ...(data.legal || {}) };
         if (resolvedShellRefresh == null) {
           resolvedShellRefresh = featureFlagEnabled('shell_refresh');
@@ -291,6 +355,10 @@
         token.set(access, refresh);
         return d;
       },
+      passwordRecovery: {
+        request: (email) => req('POST', '/auth/password-reset/request', { email }),
+        confirm: (email, code, password) => req('POST', '/auth/password-reset/confirm', { email, code, password }),
+      },
       logout: async () => {
         const refresh = token.refresh;
         if (refresh) {
@@ -301,12 +369,16 @@
       wyvHandoff: () => req('POST', '/auth/wyv-handoff'),
       edgeHandoff: () => req('POST', '/auth/edge-handoff'),
       edgeExchange: (grant) => req('POST', '/auth/edge-exchange', { grant }),
+      verification: {
+        request: () => req('POST', '/auth/verification/request', {}),
+        confirm: (code) => req('POST', '/auth/verification/confirm', { code }),
+      },
     };
 
     async function maybeLaunchWyvFromQuery() {
       const target = wyvContinueTarget();
       const wyvBase = wyvPublicBaseUrl();
-      if (!target || !wyvBase || !token.access) return false;
+      if (!target || !wyvBase || !token.access || !isEmailVerified()) return false;
       const handoff = await auth.wyvHandoff();
       const grant = handoff?.grant || handoff?.data?.grant || handoff?.handoff;
       if (!grant) throw new Error('Wyv handoff did not return a grant');
@@ -322,13 +394,18 @@
       try {
         void leaveVoiceChannel(true);
       } catch { }
+      stopCallRingtone();
+      if (typeof voiceState !== 'undefined') {
+        voiceState.incomingCall = null;
+        voiceState.outgoingCall = null;
+      }
 
       socket?.disconnect();
       token.clear();
       store.set({
         user: null,
         isAuthed: false,
-        view: 'auth',
+        view: maintenanceAppliesTo(null) ? 'maintenance' : 'auth',
         activeServerId: null,
         activeChannelId: null,
         activeDmId: null,
@@ -358,20 +435,20 @@
       lookup: (query) => req('GET', `/users/lookup?q=${encodeURIComponent(query)}`),
       directory: ({ recommended = false } = {}) => req('GET', `/users/directory${recommended ? '?recommended=true' : ''}`),
     };
-    const ai = {
-      mcp: {
-        get: () => req('GET', '/ai/mcp-connection'),
-        create: () => req('POST', '/ai/mcp-connection'),
-        revoke: () => req('DELETE', '/ai/mcp-connection'),
-      },
+    const developer = {
       apiTokens: {
-        list: () => req('GET', '/ai/api-tokens'),
-        create: (name) => req('POST', '/ai/api-tokens', { name }),
-        revoke: (tokenId) => req('DELETE', `/ai/api-tokens/${tokenId}`),
-        rotate: (tokenId) => req('POST', `/ai/api-tokens/${tokenId}/rotate`),
-        revokeAll: () => req('POST', '/ai/api-tokens/revoke-all'),
-        rotateAll: () => req('POST', '/ai/api-tokens/rotate-all'),
+        list: () => req('GET', '/api-tokens'),
+        create: (name) => req('POST', '/api-tokens', { name }),
+        revoke: (tokenId) => req('DELETE', `/api-tokens/${tokenId}`),
+        rotate: (tokenId) => req('POST', `/api-tokens/${tokenId}/rotate`),
+        revokeAll: () => req('POST', '/api-tokens/revoke-all'),
+        rotateAll: () => req('POST', '/api-tokens/rotate-all'),
       },
+    };
+    const billing = {
+      entitlement: () => req('GET', '/billing/entitlement'),
+      checkout: (returnUrl = null) => req('POST', '/billing/checkout', returnUrl ? { return_url: returnUrl } : {}),
+      portal: (returnUrl = null) => req('POST', '/billing/portal', returnUrl ? { return_url: returnUrl } : {}),
     };
     const userCache = new Map();
     const userFetchInFlight = new Map();
@@ -708,11 +785,16 @@
 
     function canManageRoles(serverId) {
       const role = String(getCurrentMemberRole(serverId) || '').toLowerCase();
-      return role === 'owner';
+      return ['owner', 'admin'].includes(role);
+    }
+
+    function canManageServerSettings(serverId) {
+      const role = String(getCurrentMemberRole(serverId) || '').toLowerCase();
+      return ['owner', 'admin'].includes(role);
     }
 
     function communityToolsEnabled() {
-      return featureFlagEnabled('community_tools');
+      return featureFlagEnabled('community_tools') && runtimeControlEnabled('community_tools');
     }
 
     function directoryRecommendationsEnabled() {
@@ -794,10 +876,23 @@
 
     // ─── Uploads ──────────────────────────────────────────────────────────────────
     const uploads = {
-      upload: (file) => {
+      upload: async (file) => {
+        if (!runtimeControlEnabled('uploads')) {
+          throw new Error(runtimeControlUnavailableMessage('uploads'));
+        }
         const form = new FormData();
         form.append('file', file);
-        return req('POST', '/uploads', form, { noContentType: true });
+        let result = await req('POST', '/uploads', form, { noContentType: true });
+        if (result?.scan_status !== 'pending') return result;
+        const deadline = Date.now() + 120000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          result = await req('GET', `/uploads/${encodeURIComponent(result.id)}`);
+          if (result?.scan_status === 'clean' || result?.scan_status === 'skipped') return result;
+          if (result?.scan_status === 'infected') throw new Error('Upload rejected by malware scanner');
+          if (result?.scan_status === 'error') throw new Error(result.scan_error || 'Upload scanning failed');
+        }
+        throw new Error('Upload scanning timed out');
       },
     };
 
@@ -805,16 +900,61 @@
     const community = {
       activity: (serverId) => req('GET', `/servers/${serverId}/activity`),
       webhooks: {
-        list: (serverId) => req('GET', `/servers/${serverId}/webhooks`),
-        create: (serverId, body) => req('POST', `/servers/${serverId}/webhooks`, body),
-        delete: (webhookId) => req('DELETE', `/webhooks/${webhookId}`),
-        deliveries: (serverId, webhookId) => req('GET', `/servers/${serverId}/webhooks/${webhookId}/deliveries`),
-        invoke: (webhookId, token, body) => req('POST', `/webhooks/${webhookId}/${encodeURIComponent(token)}`, body),
+        list: (serverId) => runtimeControlEnabled('webhooks')
+          ? req('GET', `/servers/${serverId}/webhooks`)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('webhooks'))),
+        create: (serverId, body) => runtimeControlEnabled('webhooks')
+          ? req('POST', `/servers/${serverId}/webhooks`, body)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('webhooks'))),
+        delete: (webhookId) => runtimeControlEnabled('webhooks')
+          ? req('DELETE', `/webhooks/${webhookId}`)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('webhooks'))),
+        deliveries: (serverId, webhookId) => runtimeControlEnabled('webhooks')
+          ? req('GET', `/servers/${serverId}/webhooks/${webhookId}/deliveries`)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('webhooks'))),
+        invoke: (webhookId, token, body) => runtimeControlEnabled('webhooks')
+          ? req('POST', `/webhooks/${webhookId}/${encodeURIComponent(token)}`, body)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('webhooks'))),
       },
       workspace: {
-        get: (channelId, visibility = 'public') => req('GET', `/channels/${channelId}/workspace?visibility=${encodeURIComponent(visibility || 'public')}`),
-        update: (channelId, body) => req('PATCH', `/channels/${channelId}/workspace`, body),
+        get: (channelId, visibility = 'public') => runtimeControlEnabled('workspaces')
+          ? req('GET', `/channels/${channelId}/workspace?visibility=${encodeURIComponent(visibility || 'public')}`)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('workspaces'))),
+        update: (channelId, body) => runtimeControlEnabled('workspaces')
+          ? req('PATCH', `/channels/${channelId}/workspace`, body)
+          : Promise.reject(new Error(runtimeControlUnavailableMessage('workspaces'))),
+        git: {
+          info: (channelId, visibility = 'public') => req('GET', `/channels/${channelId}/workspace/git?visibility=${encodeURIComponent(visibility || 'public')}`),
+          createCredential: (channelId, visibility, body) => req('POST', `/channels/${channelId}/workspace/git/credentials?visibility=${encodeURIComponent(visibility || 'public')}`, body),
+        },
       },
+    };
+
+    // ─── Trust & Safety ──────────────────────────────────────────────────────────
+    const reports = {
+      create: ({ targetType, targetId, reason, details = null }) =>
+        req('POST', '/reports', {
+          target_type: targetType,
+          target_id: targetId,
+          reason,
+          details: details || undefined,
+        }),
+      listServer: (serverId) => req('GET', `/servers/${serverId}/moderation/reports`),
+      update: (reportId, body) => req('PATCH', `/reports/${reportId}`, body),
+      addNote: (reportId, body) => req('POST', `/reports/${reportId}/notes`, { body }),
+    };
+
+    const moderation = {
+      members: (serverId) => req('GET', `/servers/${serverId}/moderation/members`),
+      actions: (serverId) => req('GET', `/servers/${serverId}/moderation/actions`),
+      warn: (serverId, body) => req('POST', `/servers/${serverId}/moderation/warn`, body),
+      timeout: (serverId, body) => req('POST', `/servers/${serverId}/moderation/timeout`, body),
+      untimeout: (serverId, body) => req('POST', `/servers/${serverId}/moderation/untimeout`, body),
+      kick: (serverId, body) => req('POST', `/servers/${serverId}/moderation/kick`, body),
+      ban: (serverId, body) => req('POST', `/servers/${serverId}/moderation/ban`, body),
+      unban: (serverId, body) => req('POST', `/servers/${serverId}/moderation/unban`, body),
+      deleteMessage: (serverId, messageId, body) =>
+        req('DELETE', `/servers/${serverId}/moderation/messages/${messageId}`, body),
     };
 
     // ─── WebSocket ────────────────────────────────────────────────────────────────
@@ -953,6 +1093,8 @@
       speakingPollTimer: null,
       muted: false,
       statusPollTimer: null,
+      incomingCall: null,
+      outgoingCall: null,
     };
     const socketSubscriptions = new Set();
 
@@ -1171,10 +1313,11 @@
     }
 
     const SOUND_EFFECTS = {
-      connect: '/static/sounds/rtc_connect.wav',
-      disconnect: '/static/sounds/rtc_disconnect.wav',
-      error: '/static/sounds/rtc_error.wav',
-      ping: '/static/sounds/notification_ping.wav',
+      call: '/sounds/call.wav',
+      connect: '/sounds/rtc_connect.wav',
+      disconnect: '/sounds/rtc_disconnect.wav',
+      error: '/sounds/rtc_error.wav',
+      ping: '/sounds/notification_ping.wav',
     };
     const soundEffectPool = new Map();
     let soundEffectsPrimed = false;
@@ -1197,12 +1340,18 @@
         const audio = getSoundEffect(effectName);
         if (!audio) continue;
         try {
-          const clone = audio.cloneNode();
-          clone.volume = 0;
-          clone.play().then(() => {
-            clone.pause();
-            clone.currentTime = 0;
-          }).catch(() => { });
+          audio.muted = true;
+          audio.volume = 0;
+          audio.currentTime = 0;
+          audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = false;
+            audio.volume = 1;
+          }).catch(() => {
+            audio.muted = false;
+            audio.volume = 1;
+          });
         } catch { }
       }
     }
@@ -1211,10 +1360,31 @@
       const audio = getSoundEffect(effectName);
       if (!audio) return;
       try {
-        const clone = audio.cloneNode();
-        clone.volume = 1;
-        clone.currentTime = 0;
-        void clone.play().catch(() => { });
+        audio.pause();
+        audio.muted = false;
+        audio.volume = 1;
+        audio.currentTime = 0;
+        void audio.play().catch(() => { });
+      } catch { }
+    }
+
+    function startCallRingtone() {
+      const audio = getSoundEffect('call');
+      if (!audio) return;
+      try {
+        audio.loop = true;
+        audio.currentTime = 0;
+        void audio.play().catch(() => { });
+      } catch { }
+    }
+
+    function stopCallRingtone() {
+      const audio = getSoundEffect('call');
+      if (!audio) return;
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.loop = false;
       } catch { }
     }
 
@@ -1324,6 +1494,7 @@
       key: '<path d="M21 2.25a4.5 4.5 0 0 0-4.5 4.5c0 .59.114 1.153.319 1.669L9 16.238V18.75H6.75V21H4.5v-2.25H2.25v-2.25l7.819-7.819A4.5 4.5 0 1 0 21 2.25Z" /><path d="M16.5 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />',
       bookmark: '<path d="M6.75 3.75h10.5a.75.75 0 0 1 .75.75v15.75l-6-3.75-6 3.75V4.5a.75.75 0 0 1 .75-.75Z" />',
       pin: '<path d="M15.75 3.75 20.25 8.25l-3 3-.75 4.5-2.25-.75-4.5 4.5" /><path d="M8.25 6 18 15.75" />',
+      flag: '<path d="M5.25 21V4.875m0 0A16.5 16.5 0 0 1 19.5 6.75c-1.41 2.02-1.41 4.73 0 6.75A16.5 16.5 0 0 0 5.25 11.625m0-6.75v6.75" />',
       userGroup: '<path d="M18 18.72a8.94 8.94 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198v-.75c0-1.665-.87-3.13-2.182-3.957m0 0A5.97 5.97 0 0 0 12 13.5a5.97 5.97 0 0 0-3.818 1.372m7.636 0A5.97 5.97 0 0 1 12 15.75a5.97 5.97 0 0 1-3.818-1.378m0 0a3 3 0 0 0-4.681 2.72A8.94 8.94 0 0 0 6 18.72m9.818-9.348a3.75 3.75 0 1 0-7.636 0 3.75 3.75 0 0 0 7.636 0Zm3.182-1.372a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />',
       squares: '<path d="M3.75 3.75h6.75v6.75H3.75V3.75Zm9.75 0h6.75v6.75H13.5V3.75Zm0 9.75h6.75v6.75H13.5V13.5Zm-9.75 0h6.75v6.75H3.75V13.5Z" />',
       speakerWave: '<path d="M19.114 8.181a6 6 0 0 1 0 7.638M15.75 9.75a3.75 3.75 0 0 1 0 4.5" /><path d="M11.25 5.25 7.5 8.25H4.5a.75.75 0 0 0-.75.75v6a.75.75 0 0 0 .75.75h3l3.75 3V5.25Z" />',
@@ -1854,21 +2025,23 @@
       title = 'Create Channel',
       placeholder = 'new-channel',
       confirmLabel = 'Create',
+      testIdPrefix = 'channel-create',
       onConfirm,
     }) {
       const overlay = el('div', { class: 'modal-overlay' });
-      const modal = el('div', { class: 'modal' });
+      const modal = el('div', { class: 'modal', 'data-testid': `${testIdPrefix}-modal` });
       const heading = el('h3', {}, title);
-      const nameInput = el('input', { class: 'modal-input', type: 'text', placeholder });
-      const typeSelect = el('select', { class: 'modal-input' },
+      const nameInput = el('input', { class: 'modal-input', type: 'text', placeholder, 'data-testid': `${testIdPrefix}-name` });
+      const typeSelect = el('select', { class: 'modal-input', 'data-testid': `${testIdPrefix}-type` },
         el('option', { value: 'text' }, 'Text Channel'),
         el('option', { value: 'voice' }, 'Voice Channel')
       );
 
       const actions = el('div', { class: 'modal-actions' });
-      const cancelBtn = el('button', { class: 'btn-ghost', onClick: () => overlay.remove() }, 'Cancel');
+      const cancelBtn = el('button', { class: 'btn-ghost', onClick: () => overlay.remove(), 'data-testid': `${testIdPrefix}-cancel` }, 'Cancel');
       const createBtn = el('button', {
         class: 'btn-confirm',
+        'data-testid': `${testIdPrefix}-save`,
         onClick: () => {
           const name = nameInput.value.trim();
           const type = (typeSelect.value || 'text').toLowerCase();
@@ -2139,11 +2312,12 @@
       modalClassName = '',
       headClassName = '',
       bodyClassName = '',
+      testIdPrefix = 'settings-modal',
       onExtraAction = null,
       onSave,
     }) {
       const overlay = el('div', { class: 'modal-overlay' });
-      const modal = el('div', { class: `modal settings-modal${modalClassName ? ` ${modalClassName}` : ''}` });
+      const modal = el('div', { class: `modal settings-modal${modalClassName ? ` ${modalClassName}` : ''}`, 'data-testid': `${testIdPrefix}-modal` });
 
       let iconUrl = (initialIcon || '').trim();
       let detailsValue = String(initialDetails || '');
@@ -2165,12 +2339,14 @@
         value: initialName || '',
         placeholder: namePlaceholder || '',
         maxlength: '64',
+        'data-testid': `${testIdPrefix}-name`,
       });
       const iconInput = el('input', {
         class: 'settings-input',
         type: 'text',
         value: iconUrl,
         placeholder: 'https://... or /media/...',
+        'data-testid': `${testIdPrefix}-icon`,
       });
       const iconInputWrap = el('div', { class: 'settings-field' },
         el('label', {}, `${iconLabel} URL`),
@@ -2222,6 +2398,7 @@
           class: 'settings-textarea',
           placeholder: detailsPlaceholder || '',
           maxlength: String(detailsMaxLength || 280),
+          'data-testid': `${testIdPrefix}-details`,
         });
         detailsInput.value = detailsValue;
         detailsInput.addEventListener('input', () => {
@@ -2252,6 +2429,7 @@
         toggleBtn = el('button', {
           class: `settings-switch${toggleValue ? ' on' : ''}`,
           type: 'button',
+          'data-testid': `${testIdPrefix}-toggle`,
           onClick: () => {
             if (saving) return;
             toggleValue = !toggleValue;
@@ -2274,6 +2452,7 @@
       const cancelBtn = el('button', {
         class: 'btn-ghost',
         type: 'button',
+        'data-testid': `${testIdPrefix}-cancel`,
         onClick: () => {
           if (!saving) overlay.remove();
         }
@@ -2282,6 +2461,7 @@
         ? el('button', {
           class: 'btn-soft',
           type: 'button',
+          'data-testid': `${testIdPrefix}-extra`,
           onClick: async () => {
             if (saving) return;
             if (extraSection && typeof extraSectionRenderer === 'function') {
@@ -2298,7 +2478,7 @@
           },
         }, extraActionLabel)
         : null;
-      const saveBtn = el('button', { class: 'btn-confirm', type: 'button' }, saveLabel);
+      const saveBtn = el('button', { class: 'btn-confirm', type: 'button', 'data-testid': `${testIdPrefix}-save` }, saveLabel);
 
       const actions = el('div', { class: 'settings-actions' }, cancelBtn, extraActionBtn, saveBtn);
       modal.append(head, body, actions);
@@ -2466,7 +2646,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         window.location.replace('/');
         return;
       }
-      store.set({ view: 'app' });
+      store.set({ view: resolvePostAuthView(store.state.user) });
     }
 
     function buildServerIntegrationsSection(serverId) {
@@ -2478,6 +2658,14 @@ If you do not fully understand these risks, do not enable this mode.`;
       }
       if (!canManageWebhooks(normalizedServerId)) {
         container.appendChild(el('div', { class: 'community-empty' }, 'You need owner or admin permissions to manage webhooks.'));
+        return container;
+      }
+      if (!runtimeControlEnabled('webhooks')) {
+        container.appendChild(el('div', { class: 'community-empty' }, runtimeControlUnavailableMessage('webhooks')));
+        return container;
+      }
+      if (!isEmailVerified()) {
+        container.appendChild(el('div', { class: 'community-empty' }, 'Verify your email before creating or managing webhooks.'));
         return container;
       }
 
@@ -2652,12 +2840,13 @@ If you do not fully understand these risks, do not enable this mode.`;
     }
 
     function connectorsAllowedForCurrentContext() {
+      if (!runtimeControlEnabled('ai')) return false;
       if (!(currentClientMode() === 'edge' && isUiA())) return true;
       return !!store.state.user?.is_admin;
     }
 
     function defaultSettingsSection() {
-      return connectorsAllowedForCurrentContext() && currentClientMode() === 'edge' && isUiA() ? 'connectors' : 'account';
+      return 'account';
     }
 
     function showSettingsHub(initialSection = 'account') {
@@ -2665,7 +2854,7 @@ If you do not fully understand these risks, do not enable this mode.`;
       if (!user) return;
 
       const overlay = el('div', { class: 'modal-overlay' });
-      const modal = el('div', { class: 'modal settings-hub-modal' });
+      const modal = el('div', { class: 'modal settings-hub-modal', 'data-testid': 'settings-hub-modal' });
       const shell = el('div', { class: 'settings-hub-shell' });
       const nav = el('div', { class: 'settings-hub-nav' },
         el('div', { class: 'settings-hub-nav-title' }, 'Preferences')
@@ -2673,7 +2862,7 @@ If you do not fully understand these risks, do not enable this mode.`;
       const panel = el('div', { class: 'settings-hub-panel' });
       const head = el('div', { class: 'settings-head' });
       const title = el('div', { class: 'settings-title' }, 'Settings');
-      const subtitle = el('div', { class: 'settings-subtitle' }, 'Manage your profile, connectors, API access, and preview features.');
+      const subtitle = el('div', { class: 'settings-subtitle' }, 'Manage your profile, email verification, and account preferences.');
       const content = el('div', { class: 'settings-hub-content' });
       const signOut = async () => {
         overlay.remove();
@@ -2687,13 +2876,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         }, heroIcon('arrowLeftOnRectangle', { size: 16 }), 'Sign Out'),
         el('button', { class: 'btn-ghost', type: 'button', onClick: () => overlay.remove() }, 'Close')
       );
-      const connectorsAllowed = connectorsAllowedForCurrentContext();
-      let section = ['account', 'connectors', 'api', 'chat', 'ai'].includes(initialSection)
-        ? (['chat', 'ai'].includes(initialSection) ? 'api' : initialSection)
-        : 'account';
-      if (section === 'connectors' && !connectorsAllowed) {
-        section = 'account';
-      }
+      let section = 'account';
 
       head.append(title, subtitle);
       panel.append(head, content, footer);
@@ -2702,16 +2885,18 @@ If you do not fully understand these risks, do not enable this mode.`;
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
 
-      const persistProfile = async ({ name, icon, details, toggle, aiOptIn, nsfw18Verified }) => {
+      const persistProfile = async ({ name, icon, details, toggle, aiOptIn, nsfw18Verified, profileCosmetics = null }) => {
         const currentPresence = store.state.user?.presence || 'online';
-        const updatedBase = await users.update({
+        const profileUpdate = {
           display_name: name || null,
           bio: details || null,
           avatar: icon,
           directory_opt_in: !!toggle,
           ai_opt_in: !!aiOptIn,
           nsfw_18_verified: !!nsfw18Verified,
-        });
+        };
+        if (profileCosmetics) profileUpdate.profile_cosmetics = profileCosmetics;
+        const updatedBase = await users.update(profileUpdate);
         const updated = { ...(updatedBase || {}), presence: store.state.user?.presence || currentPresence };
         if (updated?.id) userCache.set(updated.id, updated);
 
@@ -2746,10 +2931,20 @@ If you do not fully understand these risks, do not enable this mode.`;
         let detailsValue = String(store.state.user?.bio || '');
         let aiOptInValue = !!store.state.user?.ai_opt_in;
         let nsfwVerifiedValue = !!store.state.user?.nsfw_18_verified;
+        const premiumProfileEnabled = isPremiumEntitled();
+        const profileUploadsAllowed = isEmailVerified() && runtimeControlEnabled('uploads');
+        const profileUploadUnavailableMessage = isEmailVerified()
+          ? runtimeControlUnavailableMessage('uploads')
+          : 'Verify your email before uploading images.';
+        let premiumAccentValue = String(store.state.user?.profile_cosmetics?.accent_color || '#8ce7ff');
+        let premiumBannerMediaId = String(store.state.user?.profile_cosmetics?.banner_media_id || '');
+        let premiumBadgeValue = store.state.user?.profile_cosmetics?.show_premium_badge !== false;
         let saving = false;
         let uploading = false;
         const fileInput = el('input', { type: 'file', accept: 'image/*' });
         fileInput.style.display = 'none';
+        const bannerFileInput = premiumProfileEnabled ? el('input', { type: 'file', accept: 'image/*' }) : null;
+        if (bannerFileInput) bannerFileInput.style.display = 'none';
 
         const preview = el('div', { class: 'settings-icon-preview' });
         const nameInput = el('input', {
@@ -2758,25 +2953,47 @@ If you do not fully understand these risks, do not enable this mode.`;
           value: store.state.user?.display_name || store.state.user?.username || '',
           placeholder: store.state.user?.username || 'Display Name',
           maxlength: '64',
+          'data-testid': 'settings-display-name',
         });
         const iconInput = el('input', {
           class: 'settings-input',
           type: 'text',
           value: iconUrl,
           placeholder: 'https://... or /media/...',
+          'data-testid': 'settings-avatar-url',
         });
         const bioInput = el('textarea', {
           class: 'settings-textarea',
           maxlength: '280',
           placeholder: 'Tell people a bit about yourself.',
+          'data-testid': 'settings-bio',
         }, detailsValue);
         bioInput.value = detailsValue;
         const errorEl = el('div', { class: 'settings-error' });
         errorEl.style.display = 'none';
-        const switchBtn = el('button', { class: `settings-switch${toggleValue ? ' on' : ''}`, type: 'button' });
-        const aiOptInSwitch = el('button', { class: `settings-switch${aiOptInValue ? ' on' : ''}`, type: 'button' });
-        const nsfwVerifiedSwitch = el('button', { class: `settings-switch${nsfwVerifiedValue ? ' on' : ''}`, type: 'button' });
-        const saveBtn = el('button', { class: 'btn-confirm', type: 'button' }, 'Save Profile');
+        const switchBtn = el('button', { class: `settings-switch${toggleValue ? ' on' : ''}`, type: 'button', 'data-testid': 'settings-directory-toggle' });
+        const aiOptInSwitch = el('button', { class: `settings-switch${aiOptInValue ? ' on' : ''}`, type: 'button', 'data-testid': 'settings-ai-toggle' });
+        const nsfwVerifiedSwitch = el('button', { class: `settings-switch${nsfwVerifiedValue ? ' on' : ''}`, type: 'button', 'data-testid': 'settings-nsfw-toggle' });
+        const premiumAccentInput = premiumProfileEnabled ? el('input', {
+          class: 'settings-input premium-accent-input',
+          type: 'color',
+          value: premiumAccentValue,
+          'data-testid': 'settings-premium-accent',
+        }) : null;
+        const premiumBannerInput = premiumProfileEnabled ? el('input', {
+          class: 'settings-input',
+          type: 'text',
+          value: premiumBannerMediaId,
+          placeholder: 'No banner uploaded',
+          maxlength: '255',
+          'data-testid': 'settings-premium-banner',
+        }) : null;
+        const premiumBadgeSwitch = premiumProfileEnabled ? el('button', {
+          class: `settings-switch${premiumBadgeValue ? ' on' : ''}`,
+          type: 'button',
+          'data-testid': 'settings-premium-badge-toggle',
+        }) : null;
+        const saveBtn = el('button', { class: 'btn-confirm', type: 'button', 'data-testid': 'settings-save-profile' }, 'Save Profile');
 
         const updatePreview = () => {
           preview.innerHTML = '';
@@ -2800,6 +3017,9 @@ If you do not fully understand these risks, do not enable this mode.`;
           switchBtn.disabled = saving || uploading;
           aiOptInSwitch.disabled = saving || uploading;
           nsfwVerifiedSwitch.disabled = saving || uploading;
+          if (premiumAccentInput) premiumAccentInput.disabled = saving || uploading;
+          if (premiumBannerInput) premiumBannerInput.disabled = saving || uploading;
+          if (premiumBadgeSwitch) premiumBadgeSwitch.disabled = saving || uploading;
         };
 
         const setError = (message) => {
@@ -2830,6 +3050,17 @@ If you do not fully understand these risks, do not enable this mode.`;
           nsfwVerifiedValue = !nsfwVerifiedValue;
           nsfwVerifiedSwitch.classList.toggle('on', nsfwVerifiedValue);
         });
+        premiumAccentInput?.addEventListener('input', () => {
+          premiumAccentValue = premiumAccentInput.value;
+        });
+        premiumBannerInput?.addEventListener('input', () => {
+          premiumBannerMediaId = premiumBannerInput.value.trim();
+        });
+        premiumBadgeSwitch?.addEventListener('click', () => {
+          if (saving || uploading) return;
+          premiumBadgeValue = !premiumBadgeValue;
+          premiumBadgeSwitch.classList.toggle('on', premiumBadgeValue);
+        });
 
         fileInput.addEventListener('change', async () => {
           const file = fileInput.files?.[0];
@@ -2856,6 +3087,30 @@ If you do not fully understand these risks, do not enable this mode.`;
           }
         });
 
+        bannerFileInput?.addEventListener('change', async () => {
+          const file = bannerFileInput.files?.[0];
+          bannerFileInput.value = '';
+          if (!file) return;
+          setError('');
+          uploading = true;
+          setBusy();
+          try {
+            toast(`Uploading ${file.name}...`, 'info', 5000);
+            const result = await uploads.upload(file);
+            const mediaId = String(result?.id || result?.upload_id || '').trim();
+            if (!mediaId) throw new Error('Upload response missing media ID');
+            premiumBannerMediaId = mediaId;
+            premiumBannerInput.value = mediaId;
+            toast('Profile banner uploaded', 'success');
+          } catch (err) {
+            setError(err?.message || 'Failed to upload banner');
+            toast(err?.message || 'Failed to upload banner', 'error');
+          } finally {
+            uploading = false;
+            setBusy();
+          }
+        });
+
         saveBtn.addEventListener('click', async () => {
           if (saving || uploading) return;
           saving = true;
@@ -2870,6 +3125,11 @@ If you do not fully understand these risks, do not enable this mode.`;
               toggle: toggleValue,
               aiOptIn: aiOptInValue,
               nsfw18Verified: nsfwVerifiedValue,
+              profileCosmetics: premiumProfileEnabled ? {
+                accent_color: premiumAccentValue,
+                banner_media_id: premiumBannerMediaId || null,
+                show_premium_badge: premiumBadgeValue,
+              } : null,
             });
             saveBtn.textContent = 'Save Profile';
           } catch (err) {
@@ -2892,7 +3152,18 @@ If you do not fully understand these risks, do not enable this mode.`;
                 el('div', { class: 'settings-icon-label' }, 'Profile Picture'),
                 el('div', { class: 'settings-icon-help' }, 'Upload a PNG/JPG/WebP or paste a URL.'),
                 el('div', { class: 'settings-upload-actions' },
-                  el('button', { class: 'btn-soft', type: 'button', onClick: () => fileInput.click() }, 'Upload Image'),
+                  el('button', {
+                    class: 'btn-soft',
+                    type: 'button',
+                    disabled: !profileUploadsAllowed,
+                    onClick: () => {
+                      if (!profileUploadsAllowed) {
+                        toast(profileUploadUnavailableMessage, 'error');
+                        return;
+                      }
+                      fileInput.click();
+                    },
+                  }, 'Upload Image'),
                   el('button', { class: 'btn-soft btn-danger-ghost', type: 'button', onClick: () => { iconUrl = ''; iconInput.value = ''; updatePreview(); } }, 'Clear')
                 ),
                 fileInput,
@@ -2910,18 +3181,43 @@ If you do not fully understand these risks, do not enable this mode.`;
             ),
             el('div', { class: 'settings-toggle' },
               el('div', { class: 'settings-toggle-main' },
-                el('div', { class: 'settings-toggle-title' }, 'Allow AI Improvement Use'),
-                el('div', { class: 'settings-toggle-help' }, 'Opt in if Wyvern may use your content to improve AI systems and features.')
-              ),
-              aiOptInSwitch
-            ),
-            el('div', { class: 'settings-toggle' },
-              el('div', { class: 'settings-toggle-main' },
                 el('div', { class: 'settings-toggle-title' }, '18+ NSFW Access'),
                 el('div', { class: 'settings-toggle-help' }, 'Self-attest that you are 18 or older so NSFW-labeled messages can be shown to you.')
               ),
               nsfwVerifiedSwitch
             ),
+            premiumProfileEnabled ? el('div', { class: 'settings-extra-section premium-profile-card' },
+              el('div', { class: 'settings-section-kicker' }, 'Profile customization'),
+              el('div', { class: 'settings-card-copy' }, 'Choose a profile accent and banner.'),
+              el('div', { class: 'settings-field' }, el('label', {}, 'Accent color'), premiumAccentInput),
+              el('div', { class: 'settings-field' },
+                el('label', {}, 'Profile banner'),
+                premiumBannerInput,
+                el('div', { class: 'settings-upload-actions' },
+                  el('button', {
+                    class: 'btn-soft',
+                    type: 'button',
+                    disabled: !profileUploadsAllowed,
+                    onClick: () => {
+                      if (!profileUploadsAllowed) {
+                        toast(profileUploadUnavailableMessage, 'error');
+                        return;
+                      }
+                      bannerFileInput?.click();
+                    },
+                  }, 'Upload banner'),
+                  el('button', {
+                    class: 'btn-soft btn-danger-ghost',
+                    type: 'button',
+                    onClick: () => {
+                      premiumBannerMediaId = '';
+                      premiumBannerInput.value = '';
+                    },
+                  }, 'Remove banner'),
+                ),
+                bannerFileInput,
+              ),
+            ) : null,
             errorEl,
             el('div', { class: 'settings-inline-actions' }, saveBtn),
           ),
@@ -2987,6 +3283,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         const switchBtn = el('button', {
           class: `settings-switch${enabled ? ' on' : ''}`,
           type: 'button',
+          'data-testid': 'edge-mode-toggle',
           onClick: toggleEdgeMode,
           title: enabled ? 'Disable Edge Mode' : 'Enable Edge Mode',
           'aria-label': enabled ? 'Disable Edge Mode' : 'Enable Edge Mode',
@@ -3004,118 +3301,19 @@ If you do not fully understand these risks, do not enable this mode.`;
         );
       }
 
-      function renderConnectorsSection() {
-        const container = el('div', { class: 'settings-section-stack' });
-        let mcpConnection = null;
-        let mcpLoading = true;
-        let statusMessage = '';
-        let usingFallbackConnection = false;
-
-        const buildFallbackMcpConnection = () => ({
-          server_url: `${window.location.origin.replace(/\/$/, '')}/mcp`,
-          app_name: 'Wyvern',
-          recommended_client: 'ChatGPT Apps',
-          auth_method: 'OAuth 2.1',
-          published_ready: true,
-        });
-
-        const refreshMcpConnection = async () => {
-          mcpLoading = true;
-          redraw();
-          try {
-            const payload = await ai.mcp.get();
-            mcpConnection = payload?.connection || buildFallbackMcpConnection();
-            usingFallbackConnection = !payload?.connection;
-            statusMessage = usingFallbackConnection
-              ? 'Using the default Wyvern MCP URL.'
-              : '';
-          } catch (err) {
-            mcpConnection = buildFallbackMcpConnection();
-            usingFallbackConnection = true;
-            statusMessage = 'Using the default Wyvern MCP URL because live connector metadata could not be loaded right now.';
-          } finally {
-            mcpLoading = false;
-            redraw();
-          }
-        };
-
-        const copyValue = async (value, successLabel = 'Copied') => {
-          if (!value) return;
-          try {
-            await navigator.clipboard.writeText(value);
-            toast(successLabel, 'success');
-          } catch {
-            toast('Could not copy', 'error');
-          }
-        };
-
-        const redraw = () => {
-          container.innerHTML = '';
-
-          const chatgptCardChildren = [];
-          if (mcpLoading) {
-            chatgptCardChildren.push(el('div', { class: 'settings-card-copy' }, 'Loading the public Wyvern MCP endpoint...'));
-          } else {
-            const serverUrl = mcpConnection?.server_url || '';
-            const serverUrlInput = el('input', {
-              class: 'settings-input ai-token-secret-input',
-              type: 'text',
-              readOnly: 'true',
-              value: serverUrl,
-              placeholder: 'Public Wyvern MCP URL',
-            });
-            const copyUrlBtn = el('button', {
-              class: 'btn-soft',
-              type: 'button',
-              disabled: !serverUrl,
-              onClick: () => copyValue(serverUrl, 'Connector URL copied'),
-            }, 'Copy URL');
-
-            if (statusMessage) {
-              chatgptCardChildren.push(el('div', { class: 'settings-card-copy' }, statusMessage));
-            }
-
-            chatgptCardChildren.push(
-              el('div', { class: 'settings-card-copy' }, 'Connect Wyvern to ChatGPT with one public MCP URL and official account linking. No bearer tokens or API setup required.'),
-              el('div', { class: 'settings-meta-grid' },
-                el('div', { class: 'settings-meta-chip' },
-                  el('div', { class: 'settings-meta-label' }, 'Client'),
-                  el('div', { class: 'settings-meta-value' }, 'ChatGPT Apps')
-                ),
-                el('div', { class: 'settings-meta-chip' },
-                  el('div', { class: 'settings-meta-label' }, 'Access'),
-                  el('div', { class: 'settings-meta-value' }, 'OAuth read-only MCP')
-                ),
-                el('div', { class: 'settings-meta-chip' },
-                  el('div', { class: 'settings-meta-label' }, 'Status'),
-                  el('div', { class: 'settings-meta-value' }, mcpConnection ? (usingFallbackConnection ? 'Fallback ready' : 'Publish-ready') : 'Unavailable')
-                )
-              ),
-              el('div', { class: 'settings-field' },
-                el('label', {}, 'Public MCP URL'),
-                el('div', { class: 'ai-token-secret-row' }, serverUrlInput, copyUrlBtn)
-              ),
-              el('div', { class: 'settings-card-copy' },
-                'For testing, create a custom connector in ChatGPT and paste this URL. After the app is published through OpenAI, users will just click Connect and sign into Wyvern with OAuth.'
-              )
-            );
-          }
-
-          const chatgptCard = el('div', { class: 'settings-card' }, ...chatgptCardChildren);
-
-          container.append(
-            el('div', { class: 'settings-section-kicker' }, 'Connectors'),
-            el('div', { class: 'settings-section-intro' }, 'Connect Wyvern to chat apps and other user-friendly tools without manual API setup.'),
-            chatgptCard
-          );
-        };
-
-        void refreshMcpConnection();
-        return container;
-      }
-
       function renderApiSection() {
         const container = el('div', { class: 'settings-section-stack' });
+        if (!isEmailVerified()) {
+          container.append(
+            el('div', { class: 'settings-section-kicker' }, 'API Access'),
+            el('div', { class: 'settings-section-intro' }, 'Verify your email before creating API tokens or connecting third-party tools.'),
+            el('div', { class: 'settings-card verification-required-card' },
+              el('div', { class: 'settings-card-copy' }, 'Email verification protects high-impact account actions. Use the verification banner in the app to request a six-digit code and finish verification.'),
+              el('div', { class: 'settings-warning-copy' }, 'API token management will unlock after your email is verified.')
+            )
+          );
+          return container;
+        }
         let tokens = [];
         let loadingTokens = true;
         let canManageTokens = true;
@@ -3128,7 +3326,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           loadingTokens = true;
           redraw();
           try {
-            const payload = await ai.apiTokens.list();
+            const payload = await developer.apiTokens.list();
             tokens = Array.isArray(payload?.tokens) ? payload.tokens : [];
             canManageTokens = true;
           } catch (err) {
@@ -3158,17 +3356,16 @@ If you do not fully understand these risks, do not enable this mode.`;
 
         const redraw = () => {
           container.innerHTML = '';
-          const wyvBase = wyvPublicBaseUrl();
-          const wyvApiBase = wyvBase ? `${wyvBase}/openai/v1` : '/openai/v1';
+          const apiBase = `${window.location.origin}${apiPrefix()}`;
 
           const accessCard = el('div', { class: 'settings-card' },
             el('div', { class: 'settings-card-copy' },
-              'Use Wyvern API tokens to connect Wyv and other approved apps, tools, and automations to your account.',
+              'Use Wyvern API tokens only with approved account integrations and automations.',
             ),
             el('div', { class: 'settings-meta-grid' },
-              el('div', { class: 'settings-meta-chip' },
-                el('div', { class: 'settings-meta-label' }, 'API Base'),
-                el('div', { class: 'settings-meta-value' }, wyvApiBase)
+                el('div', { class: 'settings-meta-chip' },
+                  el('div', { class: 'settings-meta-label' }, 'API Base'),
+                el('div', { class: 'settings-meta-value' }, apiBase)
               ),
               el('div', { class: 'settings-meta-chip' },
                 el('div', { class: 'settings-meta-label' }, 'Auth'),
@@ -3179,7 +3376,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                 el('div', { class: 'settings-meta-value' }, canManageTokens ? 'Admin-managed rollout' : 'Access limited')
               )
             ),
-            el('div', { class: 'settings-warning-copy' }, 'This API is OpenAI-compatible and now lives on Wyv. Bot creation tools will arrive separately later.')
+            el('div', { class: 'settings-warning-copy' }, 'Keep tokens private. They are shown only once when created or rotated.')
           );
 
           const tokensCardChildren = [];
@@ -3231,7 +3428,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                 if (busy) return;
                 setBusy(true);
                 try {
-                  const payload = await ai.apiTokens.create(createName.trim() || 'Wyvern OpenAI API Token');
+                  const payload = await developer.apiTokens.create(createName.trim() || 'Wyvern API Token');
                   recentToken = payload?.token || null;
                   createName = '';
                   statusMessage = 'Token created.';
@@ -3253,7 +3450,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                 if (busy) return;
                 setBusy(true);
                 try {
-                  await ai.apiTokens.revokeAll();
+                  await developer.apiTokens.revokeAll();
                   recentToken = null;
                   statusMessage = 'All tokens revoked.';
                   await refreshTokens();
@@ -3274,7 +3471,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                 if (busy) return;
                 setBusy(true);
                 try {
-                  const payload = await ai.apiTokens.rotateAll();
+                  const payload = await developer.apiTokens.rotateAll();
                   recentToken = Array.isArray(payload?.tokens) && payload.tokens.length ? payload.tokens[0] : null;
                   statusMessage = 'All tokens rotated.';
                   await refreshTokens();
@@ -3305,7 +3502,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                       if (busy) return;
                       setBusy(true);
                       try {
-                        const payload = await ai.apiTokens.rotate(token.id);
+                        const payload = await developer.apiTokens.rotate(token.id);
                         recentToken = payload?.token || null;
                         statusMessage = `Rotated ${token.name || 'token'}.`;
                         await refreshTokens();
@@ -3326,7 +3523,7 @@ If you do not fully understand these risks, do not enable this mode.`;
                       if (busy || token.revoked_at) return;
                       setBusy(true);
                       try {
-                        await ai.apiTokens.revoke(token.id);
+                        await developer.apiTokens.revoke(token.id);
                         statusMessage = `Revoked ${token.name || 'token'}.`;
                         await refreshTokens();
                       } catch (err) {
@@ -3386,6 +3583,145 @@ If you do not fully understand these risks, do not enable this mode.`;
         return container;
       }
 
+      function renderBillingSection() {
+        const container = el('div', { class: 'settings-section-stack', 'data-testid': 'billing-settings' });
+        const state = { loading: true, entitlement: null, error: '', busy: false };
+
+        const currentReturnUrl = () => `${window.location.origin}${window.location.pathname}${window.location.search}`;
+        const entitlementIsPremium = (entitlement) => {
+          const status = String(entitlement?.status || entitlement?.subscription_status || '').toLowerCase();
+          return Boolean(
+            entitlement?.is_paid
+            || entitlement?.is_premium
+            || entitlement?.premium
+            || ['active', 'trialing', 'past_due', 'grace_period'].includes(status)
+          );
+        };
+        const openHostedBillingUrl = (url) => {
+          const rawUrl = String(url || '').trim();
+          if (!rawUrl) throw new Error('Billing did not return a redirect URL.');
+          const destination = new URL(rawUrl, window.location.origin);
+          if (!['https:', 'http:'].includes(destination.protocol)) throw new Error('Billing returned an invalid redirect URL.');
+          window.location.assign(destination.toString());
+        };
+        const beginCheckout = async () => {
+          if (!isEmailVerified()) {
+            toast('Verify your email before starting checkout.', 'error');
+            return;
+          }
+          state.busy = true;
+          state.error = '';
+          redraw();
+          try {
+            const payload = await billing.checkout(currentReturnUrl());
+            openHostedBillingUrl(payload?.url);
+          } catch (error) {
+            state.busy = false;
+            state.error = error?.message || 'Could not start checkout.';
+            redraw();
+          }
+        };
+        const openPortal = async () => {
+          if (!isEmailVerified()) {
+            toast('Verify your email before opening billing.', 'error');
+            return;
+          }
+          state.busy = true;
+          state.error = '';
+          redraw();
+          try {
+            const payload = await billing.portal(currentReturnUrl());
+            openHostedBillingUrl(payload?.url);
+          } catch (error) {
+            state.busy = false;
+            state.error = error?.message || 'Could not open the billing portal.';
+            redraw();
+          }
+        };
+        const redraw = () => {
+          container.innerHTML = '';
+          const entitlement = state.entitlement || {};
+          const premium = entitlementIsPremium(entitlement) || isPremiumEntitled();
+          const status = String(entitlement?.status || entitlement?.subscription_status || (premium ? 'active' : 'free')).replace(/_/g, ' ');
+          const renewsAt = entitlement?.current_period_end || entitlement?.period_end || entitlement?.renews_at || null;
+          const canceled = Boolean(entitlement?.cancel_at_period_end || entitlement?.canceled_at);
+          const accountStatus = state.loading
+            ? 'Checking your subscription...'
+            : (premium ? `${status || 'active'}${canceled ? ' · cancels at period end' : ''}` : 'Free plan');
+          const primaryAction = premium
+            ? el('button', {
+              class: 'btn-soft',
+              type: 'button',
+              disabled: state.loading || state.busy || !isEmailVerified(),
+              'data-testid': 'billing-manage',
+              onClick: openPortal,
+            }, state.busy ? 'Opening...' : 'Manage billing')
+            : el('button', {
+              class: 'btn-confirm',
+              type: 'button',
+              disabled: state.loading || state.busy || !isEmailVerified(),
+              'data-testid': 'billing-upgrade',
+              onClick: beginCheckout,
+            }, state.busy ? 'Opening...' : 'Upgrade to Premium');
+
+          container.append(
+            el('div', { class: 'settings-section-kicker' }, 'Billing'),
+            el('div', { class: 'settings-section-intro' }, 'Manage your Wyvern plan. Premium is $4.99 USD per month and can be changed or cancelled any time from the billing portal.'),
+            el('div', { class: `settings-card billing-plan-card${premium ? ' is-premium' : ''}` },
+              el('div', { class: 'billing-plan-head' },
+                el('div', {},
+                  el('div', { class: 'billing-plan-name' }, premium ? 'Wyvern Premium' : 'Wyvern Free'),
+                  el('div', { class: 'settings-card-copy' }, premium
+                    ? 'Your Premium benefits are active on this account.'
+                    : 'Upgrade when you need more room and server tools.'),
+                ),
+                el('div', { class: 'billing-price' }, '$4.99', el('span', {}, '/ month')),
+              ),
+              el('div', { class: 'settings-meta-grid' },
+                el('div', { class: 'settings-meta-chip' },
+                  el('div', { class: 'settings-meta-label' }, 'Plan status'),
+                  el('div', { class: 'settings-meta-value' }, accountStatus),
+                ),
+                renewsAt ? el('div', { class: 'settings-meta-chip' },
+                  el('div', { class: 'settings-meta-label' }, canceled ? 'Access through' : 'Next renewal'),
+                  el('div', { class: 'settings-meta-value' }, fmtDate(renewsAt)),
+                ) : null,
+              ),
+              !isEmailVerified() ? el('div', { class: 'settings-warning-copy' }, 'Verify your email from the banner in the app before starting or managing billing.') : null,
+              state.error ? el('div', { class: 'settings-error' }, state.error) : null,
+              el('div', { class: 'settings-inline-actions' }, primaryAction),
+            ),
+            el('div', { class: 'settings-card billing-limits-card' },
+              el('div', { class: 'billing-limits-title' }, 'Included with Premium'),
+              el('div', { class: 'settings-meta-grid' },
+                el('div', { class: 'settings-meta-chip' }, el('div', { class: 'settings-meta-label' }, 'Uploads'), el('div', { class: 'settings-meta-value' }, '250 MB per file · 10 GB storage · 100 uploads/day')),
+                el('div', { class: 'settings-meta-chip' }, el('div', { class: 'settings-meta-label' }, 'Server tools'), el('div', { class: 'settings-meta-value' }, '25 webhooks per server · supporter perks')),
+                el('div', { class: 'settings-meta-chip' }, el('div', { class: 'settings-meta-label' }, 'Profile'), el('div', { class: 'settings-meta-value' }, 'Premium badge, accent, banner, and personalization controls')),
+              ),
+              el('div', { class: 'settings-card-copy' }, 'Free accounts keep core messaging, 25 MB uploads, 250 MB storage, 20 uploads/day, and 5 webhooks per server.'),
+            ),
+          );
+        };
+        const refresh = async () => {
+          state.loading = true;
+          state.error = '';
+          redraw();
+          try {
+            const payload = await billing.entitlement();
+            state.entitlement = payload?.entitlement || payload || {};
+          } catch (error) {
+            state.entitlement = null;
+            state.error = error?.message || 'Billing details are unavailable right now.';
+          } finally {
+            state.loading = false;
+            redraw();
+          }
+        };
+
+        void refresh();
+        return container;
+      }
+
       function renderForDevsSection() {
         content.append(
           el('div', { class: 'settings-section-kicker' }, 'Preview Features'),
@@ -3399,17 +3735,11 @@ If you do not fully understand these risks, do not enable this mode.`;
         Array.from(nav.querySelectorAll('.settings-hub-nav-btn')).forEach((button) => {
           button.classList.toggle('active', button.dataset.section === section);
         });
-        if (section === 'connectors') content.appendChild(renderConnectorsSection());
-        else if (section === 'api') content.appendChild(renderApiSection());
-        else if (section === 'devs') renderForDevsSection();
-        else renderAccountSection();
+        renderAccountSection();
       }
 
       const sections = [
         { id: 'account', label: 'Account', icon: 'pencilSquare' },
-        connectorsAllowed ? { id: 'connectors', label: 'Connectors', icon: 'link' } : null,
-        { id: 'api', label: 'API', icon: 'key' },
-        { id: 'devs', label: 'For Devs', icon: 'cog' },
       ].filter(Boolean);
       for (const item of sections) {
         nav.appendChild(
@@ -3448,6 +3778,12 @@ If you do not fully understand these risks, do not enable this mode.`;
         toast('Server not found', 'error');
         return;
       }
+      const settingsAllowed = canManageServerSettings(normalizedServerId);
+      const moderationAllowed = canModerateServer(normalizedServerId);
+      if (!settingsAllowed && !moderationAllowed) {
+        toast('You do not have permission to manage this server.', 'error');
+        return;
+      }
 
       const overlay = el('div', { class: 'modal-overlay' });
       const modal = el('div', { class: 'modal settings-hub-modal server-settings-hub-modal' });
@@ -3462,13 +3798,18 @@ If you do not fully understand these risks, do not enable this mode.`;
       const footer = el('div', { class: 'settings-actions server-settings-footer' },
         el('button', { class: 'btn-ghost', type: 'button', onClick: () => overlay.remove() }, 'Close')
       );
-      let section = initialSection === 'integrations' ? 'integrations' : 'overview';
+      let section = initialSection === 'integrations'
+        ? (settingsAllowed ? 'integrations' : 'moderation')
+        : (initialSection === 'moderation' && moderationAllowed
+          ? 'moderation'
+          : (settingsAllowed ? 'overview' : 'moderation'));
       let iconUrl = (server.icon || '').trim();
       let detailsValue = String(server.description || '');
       let toggleValue = !!server.directory_opt_in;
       let draftName = server.name || '';
       let saving = false;
       let uploading = false;
+      const serverUploadsAllowed = isEmailVerified() && runtimeControlEnabled('uploads');
 
       const fileInput = el('input', { type: 'file', accept: 'image/*' });
       fileInput.style.display = 'none';
@@ -3482,10 +3823,14 @@ If you do not fully understand these risks, do not enable this mode.`;
 
       const updateHeader = () => {
         navTitle.textContent = server?.name || 'Server Settings';
-        title.textContent = section === 'integrations' ? 'Server Integrations' : 'Server Settings';
+        title.textContent = section === 'integrations'
+          ? 'Server Integrations'
+          : (section === 'moderation' ? 'Server Moderation' : 'Server Settings');
         subtitle.textContent = section === 'integrations'
           ? 'Manage webhooks for this server.'
-          : 'Customize this server for members.';
+          : (section === 'moderation'
+            ? 'Review reports, manage members, and inspect the local moderation history.'
+            : 'Customize this server for members.');
       };
 
       const updateServerState = (updatedServer) => {
@@ -3636,7 +3981,18 @@ If you do not fully understand these risks, do not enable this mode.`;
                 el('div', { class: 'settings-icon-label' }, 'Server Icon'),
                 el('div', { class: 'settings-icon-help' }, 'Upload a PNG/JPG/WebP or paste a URL.'),
                 el('div', { class: 'settings-upload-actions' },
-                  el('button', { class: 'btn-soft', type: 'button', onClick: () => fileInput.click() }, 'Upload Image'),
+                  el('button', {
+                    class: 'btn-soft',
+                    type: 'button',
+                    disabled: !serverUploadsAllowed,
+                    onClick: () => {
+                      if (!serverUploadsAllowed) {
+                        toast(isEmailVerified() ? runtimeControlUnavailableMessage('uploads') : 'Verify your email before uploading images.', 'error');
+                        return;
+                      }
+                      fileInput.click();
+                    },
+                  }, 'Upload Image'),
                   el('button', {
                     class: 'btn-soft btn-danger-ghost', type: 'button', onClick: () => {
                       iconUrl = '';
@@ -3672,19 +4028,286 @@ If you do not fully understand these risks, do not enable this mode.`;
         );
       }
 
+      function renderModerationSection() {
+        content.innerHTML = '';
+        const container = el('div', { class: 'moderation-section-stack', 'data-testid': 'server-moderation-panel' });
+        const state = {
+          loading: true,
+          error: '',
+          reports: [],
+          members: [],
+          actions: [],
+          memberQuery: '',
+        };
+
+        const displayActionTarget = (action) => {
+          const target = action?.target || action?.safe_target || {};
+          if (typeof target === 'string') return target;
+          return target?.display_name || target?.username || target?.user_id || action?.target_user_id || 'Member';
+        };
+
+        const redraw = () => {
+          container.innerHTML = '';
+          const reportsCard = el('div', { class: 'settings-card moderation-card' });
+          reportsCard.append(
+            el('div', { class: 'moderation-card-head' },
+              el('div', {},
+                el('div', { class: 'billing-limits-title' }, 'Report queue'),
+                el('div', { class: 'settings-card-copy' }, 'Only reports tied to this server appear here. Reporter identities are intentionally not shown.'),
+              ),
+              el('button', { class: 'btn-soft', type: 'button', disabled: state.loading, onClick: () => void refresh() }, 'Refresh')
+            )
+          );
+          if (state.loading) {
+            reportsCard.appendChild(el('div', { class: 'moderation-empty' }, 'Loading reports...'));
+          } else if (!state.reports.length) {
+            reportsCard.appendChild(el('div', { class: 'moderation-empty' }, 'No open or historical reports are available for this server.'));
+          } else {
+            const reportList = el('div', { class: 'moderation-report-list' });
+            for (const report of state.reports) {
+              const status = String(report?.status || 'open').toLowerCase();
+              const statusSelect = el('select', { class: 'member-role-select', 'aria-label': 'Report status' },
+                el('option', { value: 'open' }, 'Open'),
+                el('option', { value: 'in_review' }, 'In review'),
+                el('option', { value: 'actioned' }, 'Actioned'),
+                el('option', { value: 'dismissed' }, 'Dismissed'),
+              );
+              if (['open', 'in_review', 'actioned', 'dismissed'].includes(status)) statusSelect.value = status;
+              const resolutionInput = el('input', {
+                class: 'settings-input moderation-resolution-input',
+                type: 'text',
+                maxlength: '1000',
+                placeholder: 'Resolution reason (required when closing)',
+                value: report?.resolution_reason || '',
+              });
+              const noteInput = el('textarea', {
+                class: 'settings-textarea moderation-note-input',
+                maxlength: '1000',
+                placeholder: 'Private staff note',
+              });
+              const statusBtn = el('button', { class: 'btn-soft', type: 'button' }, 'Save status');
+              const noteBtn = el('button', { class: 'btn-soft', type: 'button' }, 'Add note');
+              const setReportBusy = (busy) => {
+                statusSelect.disabled = busy;
+                resolutionInput.disabled = busy;
+                noteInput.disabled = busy;
+                statusBtn.disabled = busy;
+                noteBtn.disabled = busy;
+              };
+              statusBtn.addEventListener('click', async () => {
+                setReportBusy(true);
+                try {
+                  await reports.update(report.id, {
+                    status: statusSelect.value,
+                    resolution_reason: resolutionInput.value.trim() || undefined,
+                  });
+                  toast('Report status updated.', 'success');
+                  await refresh();
+                } catch (error) {
+                  toast(error?.message || 'Could not update report status.', 'error');
+                  setReportBusy(false);
+                }
+              });
+              noteBtn.addEventListener('click', async () => {
+                const note = noteInput.value.trim();
+                if (!note) {
+                  toast('Write a private note first.', 'error');
+                  noteInput.focus();
+                  return;
+                }
+                setReportBusy(true);
+                try {
+                  await reports.addNote(report.id, note);
+                  toast('Private note added.', 'success');
+                  await refresh();
+                } catch (error) {
+                  toast(error?.message || 'Could not add this note.', 'error');
+                  setReportBusy(false);
+                }
+              });
+              reportList.appendChild(el('article', { class: `moderation-report-row status-${status}` },
+                el('div', { class: 'moderation-report-main' },
+                  el('div', { class: 'moderation-report-title' }, `${report?.target_type === 'profile' ? 'Profile' : 'Message'} report · ${reportTargetLabel(report)}`),
+                  el('div', { class: 'moderation-report-meta' }, `${String(report?.reason || 'other').replace(/_/g, ' ')} · ${report?.created_at ? fmtTime(report.created_at) : 'Recently submitted'}`),
+                  report?.details ? el('div', { class: 'moderation-report-details' }, report.details) : null,
+                  report?.notes?.length ? el('div', { class: 'moderation-report-notes' }, `${report.notes.length} private note${report.notes.length === 1 ? '' : 's'}`) : null,
+                ),
+                el('div', { class: 'moderation-report-controls' },
+                  statusSelect,
+                  resolutionInput,
+                  el('div', { class: 'settings-inline-actions' }, statusBtn),
+                  noteInput,
+                  el('div', { class: 'settings-inline-actions' }, noteBtn),
+                )
+              ));
+            }
+            reportsCard.appendChild(reportList);
+          }
+
+          const memberCard = el('div', { class: 'settings-card moderation-card' });
+          const memberSearch = el('input', {
+            class: 'settings-input moderation-member-search',
+            type: 'search',
+            value: state.memberQuery,
+            placeholder: 'Find a member by name or username',
+            'data-testid': 'moderation-member-search',
+          });
+          memberSearch.addEventListener('input', () => {
+            state.memberQuery = memberSearch.value;
+            redraw();
+          });
+          memberCard.append(
+            el('div', { class: 'moderation-card-head' },
+              el('div', {},
+                el('div', { class: 'billing-limits-title' }, 'Member tools'),
+                el('div', { class: 'settings-card-copy' }, 'Warnings are permanent local records. Timeouts block chat, uploads, webhooks, and voice until they expire.'),
+              ),
+              el('button', {
+                class: 'btn-soft',
+                type: 'button',
+                disabled: state.loading,
+                onClick: () => showModerationActionModal({
+                  serverId: normalizedServerId,
+                  action: 'unban',
+                  onComplete: refresh,
+                }),
+              }, 'Unban member')
+            ),
+            memberSearch,
+          );
+          const query = state.memberQuery.trim().toLowerCase();
+          const matchingMembers = state.members.filter((member) => {
+            const candidate = member?.user || member || {};
+            return !query || `${displayName(candidate)} ${candidate.username || ''} ${candidate.id || member?.user_id || ''}`.toLowerCase().includes(query);
+          });
+          if (state.loading) {
+            memberCard.appendChild(el('div', { class: 'moderation-empty' }, 'Loading server members...'));
+          } else if (!matchingMembers.length) {
+            memberCard.appendChild(el('div', { class: 'moderation-empty' }, 'No matching members found.'));
+          } else {
+            const memberList = el('div', { class: 'moderation-member-list' });
+            for (const member of matchingMembers) {
+              const targetUser = member?.user || member || {};
+              const label = displayName(targetUser);
+              const canAct = canActOnMember(normalizedServerId, member);
+              const warningCount = Array.isArray(member?.warnings)
+                ? member.warnings.length
+                : Number(member?.active_warnings || member?.warnings_count || 0);
+              const activeTimeout = member?.timeout || null;
+              const actionSelect = el('select', { class: 'member-role-select', disabled: !canAct, 'aria-label': `Moderation action for ${label}` },
+                el('option', { value: 'warn' }, 'Warn'),
+                el('option', { value: 'timeout' }, 'Timeout'),
+                activeTimeout ? el('option', { value: 'untimeout' }, 'Remove timeout') : null,
+                el('option', { value: 'kick' }, 'Kick'),
+                el('option', { value: 'ban' }, 'Ban'),
+              );
+              const applyBtn = el('button', {
+                class: 'btn-soft',
+                type: 'button',
+                disabled: !canAct,
+                onClick: () => showModerationActionModal({
+                  serverId: normalizedServerId,
+                  action: actionSelect.value,
+                  member,
+                  onComplete: async () => {
+                    if (['kick', 'ban'].includes(actionSelect.value)) {
+                      removeMemberLocally(normalizedServerId, targetUser.id || member.user_id);
+                    }
+                    await refreshServerMembers(normalizedServerId).catch(() => { });
+                    await refresh();
+                  },
+                }),
+              }, 'Apply');
+              memberList.appendChild(el('div', { class: 'moderation-member-row' },
+                avatarEl(label, 'member-av', 36, targetUser.avatar),
+                el('div', { class: 'moderation-member-main' },
+                  el('div', { class: 'moderation-member-name' }, label),
+                  el('div', { class: 'moderation-member-meta' }, `${String(member?.role || 'member')} · ${warningCount} active warning${warningCount === 1 ? '' : 's'}${activeTimeout?.expires_at ? ` · timeout until ${fmtTime(activeTimeout.expires_at)}` : ''}`),
+                ),
+                el('div', { class: 'moderation-member-actions' }, actionSelect, applyBtn),
+              ));
+            }
+            memberCard.appendChild(memberList);
+          }
+
+          const historyCard = el('div', { class: 'settings-card moderation-card' },
+            el('div', { class: 'moderation-card-head' },
+              el('div', {},
+                el('div', { class: 'billing-limits-title' }, 'Action history'),
+                el('div', { class: 'settings-card-copy' }, 'Every staff action is retained in the server audit trail.'),
+              ),
+            ),
+          );
+          if (state.loading) {
+            historyCard.appendChild(el('div', { class: 'moderation-empty' }, 'Loading action history...'));
+          } else if (!state.actions.length) {
+            historyCard.appendChild(el('div', { class: 'moderation-empty' }, 'No moderation actions have been recorded yet.'));
+          } else {
+            const history = el('div', { class: 'moderation-history-list' });
+            for (const action of state.actions.slice(0, 50)) {
+              history.appendChild(el('div', { class: 'moderation-history-row' },
+                el('div', { class: 'moderation-history-title' }, `${String(action?.action || action?.action_type || 'moderation action').replace(/_/g, ' ')} · ${displayActionTarget(action)}`),
+                el('div', { class: 'moderation-history-meta' }, `${action?.reason || 'No reason recorded'} · ${action?.created_at ? fmtTime(action.created_at) : 'Recently'}`),
+              ));
+            }
+            historyCard.appendChild(history);
+          }
+
+          if (state.error) {
+            container.appendChild(el('div', { class: 'settings-error moderation-error' }, state.error));
+          }
+          container.append(reportsCard, memberCard, historyCard);
+        };
+
+        const refresh = async () => {
+          state.loading = true;
+          state.error = '';
+          redraw();
+          const [reportResult, memberResult, actionResult] = await Promise.allSettled([
+            reports.listServer(normalizedServerId),
+            moderation.members(normalizedServerId),
+            moderation.actions(normalizedServerId),
+          ]);
+          const errors = [];
+          if (reportResult.status === 'fulfilled') state.reports = listItems(reportResult.value, ['reports']);
+          else errors.push(reportResult.reason);
+          if (memberResult.status === 'fulfilled') state.members = listItems(memberResult.value, ['members']);
+          else {
+            state.members = (store.state.members?.[normalizedServerId] || []);
+            errors.push(memberResult.reason);
+          }
+          if (actionResult.status === 'fulfilled') state.actions = listItems(actionResult.value, ['actions', 'audit']);
+          else errors.push(actionResult.reason);
+          state.loading = false;
+          if (errors.length) {
+            state.error = errors[0]?.message || 'Some moderation data could not be loaded right now.';
+          }
+          redraw();
+        };
+
+        content.append(
+          el('div', { class: 'settings-section-kicker' }, 'Moderation'),
+          el('div', { class: 'settings-section-intro' }, 'Use these server-scoped tools to review reports and take documented action. The API enforces roles and hierarchy; this panel only shows actions available to your role.'),
+          container,
+        );
+        void refresh();
+      }
+
       function renderSection() {
         updateHeader();
         Array.from(nav.querySelectorAll('.settings-hub-nav-btn')).forEach((button) => {
           button.classList.toggle('active', button.dataset.section === section);
         });
         if (section === 'integrations') renderIntegrationsSection();
+        else if (section === 'moderation' && moderationAllowed) renderModerationSection();
         else renderOverviewSection();
       }
 
       const sections = [
-        { id: 'overview', label: 'Overview', icon: 'pencilSquare' },
-        { id: 'integrations', label: 'Integrations', icon: 'link' },
-      ];
+        settingsAllowed ? { id: 'overview', label: 'Overview', icon: 'pencilSquare' } : null,
+        settingsAllowed ? { id: 'integrations', label: 'Integrations', icon: 'link' } : null,
+        moderationAllowed ? { id: 'moderation', label: 'Moderation', icon: 'flag' } : null,
+      ].filter(Boolean);
       for (const item of sections) {
         nav.appendChild(
           el('button', {
@@ -3771,6 +4394,11 @@ If you do not fully understand these risks, do not enable this mode.`;
           if (idsEqual(user.id, currentUserId)) {
             act.appendChild(el('button', { class: 'btn-soft', type: 'button', disabled: true }, 'You'));
           } else {
+            act.appendChild(el('button', {
+              class: 'btn-soft',
+              type: 'button',
+              onClick: () => showUserProfileModal(user),
+            }, 'Profile'));
             act.appendChild(el('button', {
               class: 'btn-soft',
               type: 'button',
@@ -3986,19 +4614,20 @@ If you do not fully understand these risks, do not enable this mode.`;
       placeholder = '',
       initialValue = '',
       confirmLabel = 'Continue',
+      testIdPrefix = 'text-entry',
       onSubmit,
       multiline = false,
     }) {
       const overlay = el('div', { class: 'modal-overlay modal-overlay-soft' });
-      const modal = el('div', { class: 'modal modal-small command-modal', role: 'dialog', 'aria-modal': 'true' });
+      const modal = el('div', { class: 'modal modal-small command-modal', role: 'dialog', 'aria-modal': 'true', 'data-testid': `${testIdPrefix}-modal` });
       const field = multiline
-        ? el('textarea', { class: 'modal-input modal-textarea', placeholder })
-        : el('input', { class: 'modal-input', type: 'text', placeholder });
+        ? el('textarea', { class: 'modal-input modal-textarea', placeholder, 'data-testid': `${testIdPrefix}-input` })
+        : el('input', { class: 'modal-input', type: 'text', placeholder, 'data-testid': `${testIdPrefix}-input` });
       field.value = initialValue;
       const errorEl = el('div', { class: 'auth-error' });
       errorEl.style.display = 'none';
-      const cancelBtn = el('button', { class: 'btn-ghost', type: 'button' }, 'Cancel');
-      const confirmBtn = el('button', { class: 'btn-confirm', type: 'button' }, confirmLabel);
+      const cancelBtn = el('button', { class: 'btn-ghost', type: 'button', 'data-testid': `${testIdPrefix}-cancel` }, 'Cancel');
+      const confirmBtn = el('button', { class: 'btn-confirm', type: 'button', 'data-testid': `${testIdPrefix}-submit` }, confirmLabel);
 
       async function close() {
         cleanup?.();
@@ -4045,9 +4674,321 @@ If you do not fully understand these risks, do not enable this mode.`;
       return { close };
     }
 
+    const REPORT_REASONS = [
+      ['spam', 'Spam or scam'],
+      ['harassment', 'Harassment or bullying'],
+      ['hate_or_abuse', 'Hateful or abusive content'],
+      ['sexual_content', 'Sexual or exploitative content'],
+      ['violence_or_threat', 'Threats or violence'],
+      ['self_harm', 'Self-harm concern'],
+      ['illegal_content', 'Illegal or dangerous activity'],
+      ['impersonation', 'Impersonation'],
+      ['privacy', 'Privacy concern'],
+      ['other', 'Something else'],
+    ];
+
+    function listItems(payload, keys = []) {
+      if (Array.isArray(payload)) return payload;
+      for (const key of ['items', ...keys]) {
+        if (Array.isArray(payload?.[key])) return payload[key];
+      }
+      return [];
+    }
+
+    function reportTargetLabel(report) {
+      const target = report?.target || report?.safe_target || {};
+      if (typeof target === 'string') return target;
+      const reportedUser = report?.reported_user || null;
+      if (report?.target_type === 'profile') {
+        return reportedUser?.display_name || reportedUser?.username || target?.display_name || target?.username || target?.user_id || report?.target_id || 'User profile';
+      }
+      const snapshot = report?.message_snapshot || {};
+      const preview = String(snapshot?.content || target?.content_preview || '').trim();
+      const author = reportedUser?.display_name || reportedUser?.username || target?.author_name || '';
+      if (preview) return `${author ? `${author}: ` : ''}${preview.slice(0, 88)}${preview.length > 88 ? '…' : ''}`;
+      return author || target?.channel_name || report?.target_id || 'Message';
+    }
+
+    function showReportModal({ targetType, targetId, targetLabel }) {
+      if (!targetId) {
+        toast('This item is not available to report.', 'error');
+        return;
+      }
+
+      const overlay = el('div', { class: 'modal-overlay modal-overlay-soft' });
+      const modal = el('div', {
+        class: 'modal modal-small report-modal',
+        role: 'dialog',
+        'aria-modal': 'true',
+        'data-testid': `report-${targetType}-modal`,
+      });
+      const reasonSelect = el('select', { class: 'modal-input', 'data-testid': 'report-reason' },
+        ...REPORT_REASONS.map(([value, label]) => el('option', { value }, label)),
+      );
+      const detailInput = el('textarea', {
+        class: 'modal-input modal-textarea',
+        placeholder: 'Add context that will help staff review this report (optional).',
+        maxlength: '1500',
+        'data-testid': 'report-details',
+      });
+      const errorEl = el('div', { class: 'auth-error' });
+      errorEl.style.display = 'none';
+      const cancelBtn = el('button', { class: 'btn-ghost', type: 'button', 'data-testid': 'report-cancel' }, 'Cancel');
+      const submitBtn = el('button', { class: 'btn-confirm', type: 'button', 'data-testid': 'report-submit' }, 'Send Report');
+      let busy = false;
+      let cleanup = null;
+
+      const close = () => {
+        cleanup?.();
+        overlay.remove();
+      };
+      const setBusy = (value) => {
+        busy = !!value;
+        reasonSelect.disabled = busy;
+        detailInput.disabled = busy;
+        cancelBtn.disabled = busy;
+        submitBtn.disabled = busy;
+        submitBtn.textContent = busy ? 'Sending...' : 'Send Report';
+      };
+      const submit = async () => {
+        if (busy) return;
+        errorEl.style.display = 'none';
+        setBusy(true);
+        try {
+          await reports.create({
+            targetType,
+            targetId,
+            reason: reasonSelect.value,
+            details: detailInput.value.trim() || null,
+          });
+          toast('Report sent. Thank you for helping keep Wyvern safe.', 'success');
+          close();
+        } catch (error) {
+          errorEl.textContent = error?.message || 'Could not send this report. Please try again.';
+          errorEl.style.display = 'block';
+          setBusy(false);
+        }
+      };
+
+      cancelBtn.addEventListener('click', close);
+      submitBtn.addEventListener('click', submit);
+      modal.append(
+        el('div', { class: 'command-modal-head' },
+          el('div', { class: 'command-modal-kicker' }, 'Safety tools'),
+          el('h3', { class: 'command-modal-title' }, targetType === 'profile' ? 'Report Profile' : 'Report Message'),
+          el('p', { class: 'command-modal-copy' }, `Your report is private. ${targetLabel ? `Staff will review: ${targetLabel}` : 'Staff will review it as soon as they can.'}`),
+        ),
+        el('label', { class: 'command-modal-field' },
+          el('span', { class: 'command-modal-label' }, 'Reason'),
+          reasonSelect,
+        ),
+        el('label', { class: 'command-modal-field' },
+          el('span', { class: 'command-modal-label' }, 'Additional details'),
+          detailInput,
+        ),
+        errorEl,
+        el('div', { class: 'modal-actions' }, cancelBtn, submitBtn),
+      );
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      cleanup = activateModalFocusTrap(overlay, modal, reasonSelect, close);
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay && !busy) close();
+      });
+    }
+
+    function showUserProfileModal(user) {
+      if (!user?.id) {
+        toast('This profile is unavailable right now.', 'error');
+        return;
+      }
+      const overlay = el('div', { class: 'modal-overlay modal-overlay-soft' });
+      const modal = el('div', { class: 'modal modal-small profile-modal', role: 'dialog', 'aria-modal': 'true' });
+      const label = displayName(user);
+      const isSelf = idsEqual(user.id, store.state.user?.id);
+      let cleanup = null;
+      const close = () => {
+        cleanup?.();
+        overlay.remove();
+      };
+
+      const profileHead = el('div', { class: 'profile-modal-head' },
+        avatarEl(label, 'profile-modal-avatar', 58, user.avatar),
+        el('div', { class: 'profile-modal-copy' },
+          el('h3', { class: 'command-modal-title' }, label),
+          el('div', { class: 'profile-modal-tag' }, usernameTag(user)),
+          user.presence ? el('div', { class: 'profile-modal-presence' }, presenceLabel(user.presence)) : null,
+        ),
+      );
+      const actions = el('div', { class: 'modal-actions' },
+        !isSelf ? el('button', {
+          class: 'btn-soft btn-danger-ghost',
+          type: 'button',
+          'data-testid': 'profile-report-trigger',
+          onClick: () => showReportModal({
+            targetType: 'profile',
+            targetId: user.id,
+            targetLabel: label,
+          }),
+        }, heroIcon('flag', { size: 15 }), 'Report') : null,
+        el('button', { class: 'btn-ghost', type: 'button', onClick: close }, 'Close'),
+      );
+      modal.append(
+        profileHead,
+        user.bio ? el('div', { class: 'profile-modal-bio' }, user.bio) : el('div', { class: 'profile-modal-bio is-empty' }, 'No profile bio yet.'),
+        actions,
+      );
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      cleanup = activateModalFocusTrap(overlay, modal, actions.querySelector('button'), close);
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) close();
+      });
+    }
+
+    function memberRoleRank(role) {
+      return ({ owner: 4, admin: 3, moderator: 2, member: 1 })[String(role || 'member').toLowerCase()] || 1;
+    }
+
+    function canActOnMember(serverId, member) {
+      const currentRole = getCurrentMemberRole(serverId);
+      const targetId = member?.user_id || member?.user?.id || member?.id;
+      const targetRole = member?.role || 'member';
+      if (!currentRole || !targetId || idsEqual(targetId, store.state.user?.id)) return false;
+      return memberRoleRank(currentRole) > memberRoleRank(targetRole);
+    }
+
+    function showModerationActionModal({ serverId, action, member = null, onComplete = null }) {
+      const labels = {
+        warn: 'Warn Member',
+        timeout: 'Timeout Member',
+        untimeout: 'Remove Timeout',
+        kick: 'Kick Member',
+        ban: 'Ban Member',
+        unban: 'Unban Member',
+      };
+      const overlay = el('div', { class: 'modal-overlay modal-overlay-soft' });
+      const modal = el('div', { class: 'modal modal-small moderation-action-modal', role: 'dialog', 'aria-modal': 'true' });
+      const targetUser = member?.user || member || {};
+      const targetId = targetUser?.id || member?.user_id || '';
+      const memberLabel = targetId ? displayName(targetUser) : '';
+      const targetInput = !targetId
+        ? el('input', { class: 'modal-input', type: 'text', placeholder: 'User ID', 'data-testid': 'moderation-user-id' })
+        : null;
+      const reasonInput = el('textarea', {
+        class: 'modal-input modal-textarea',
+        placeholder: 'Required reason for this action',
+        maxlength: '1000',
+        'data-testid': 'moderation-reason',
+      });
+      const durationInput = action === 'timeout'
+        ? el('select', { class: 'modal-input', 'data-testid': 'moderation-timeout-duration' },
+          el('option', { value: '60' }, '1 hour'),
+          el('option', { value: '1440' }, '24 hours'),
+          el('option', { value: '10080' }, '7 days'),
+          el('option', { value: '40320' }, '28 days'),
+        )
+        : null;
+      const errorEl = el('div', { class: 'auth-error' });
+      errorEl.style.display = 'none';
+      const cancelBtn = el('button', { class: 'btn-ghost', type: 'button' }, 'Cancel');
+      const submitBtn = el('button', { class: action === 'ban' || action === 'kick' ? 'btn-soft btn-danger-ghost' : 'btn-confirm', type: 'button' }, labels[action] || 'Apply Action');
+      let busy = false;
+      let cleanup = null;
+
+      const close = () => {
+        cleanup?.();
+        overlay.remove();
+      };
+      const setBusy = (value) => {
+        busy = !!value;
+        targetInput && (targetInput.disabled = busy);
+        reasonInput.disabled = busy;
+        durationInput && (durationInput.disabled = busy);
+        cancelBtn.disabled = busy;
+        submitBtn.disabled = busy;
+        submitBtn.textContent = busy ? 'Saving...' : (labels[action] || 'Apply Action');
+      };
+      const submit = async () => {
+        if (busy) return;
+        const userId = targetId || targetInput?.value.trim();
+        const reason = reasonInput.value.trim();
+        if (!userId) {
+          errorEl.textContent = 'Enter the member ID.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        if (!reason) {
+          errorEl.textContent = 'A reason is required.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        errorEl.style.display = 'none';
+        setBusy(true);
+        try {
+          const body = { user_id: userId, reason };
+          if (action === 'timeout') {
+            const minutes = Math.max(1, Number(durationInput?.value || 60));
+            body.expires_at = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+          }
+          const fn = moderation[action];
+          if (typeof fn !== 'function') throw new Error('This moderation action is not available.');
+          const result = await fn(serverId, body);
+          toast(`${labels[action] || 'Moderation action'} saved.`, 'success');
+          await onComplete?.(result);
+          close();
+        } catch (error) {
+          errorEl.textContent = error?.message || 'Could not save this moderation action.';
+          errorEl.style.display = 'block';
+          setBusy(false);
+        }
+      };
+
+      cancelBtn.addEventListener('click', close);
+      submitBtn.addEventListener('click', submit);
+      modal.append(
+        el('div', { class: 'command-modal-head' },
+          el('div', { class: 'command-modal-kicker' }, 'Server moderation'),
+          el('h3', { class: 'command-modal-title' }, labels[action] || 'Moderation Action'),
+          el('p', { class: 'command-modal-copy' }, memberLabel
+            ? `This action applies to ${memberLabel}. A reason is required and is saved to the server audit trail.`
+            : 'Enter the member ID and a reason. This action is saved to the server audit trail.'),
+        ),
+        targetInput ? el('label', { class: 'command-modal-field' }, el('span', { class: 'command-modal-label' }, 'Member ID'), targetInput) : null,
+        durationInput ? el('label', { class: 'command-modal-field' }, el('span', { class: 'command-modal-label' }, 'Timeout duration'), durationInput) : null,
+        el('label', { class: 'command-modal-field' }, el('span', { class: 'command-modal-label' }, 'Reason'), reasonInput),
+        errorEl,
+        el('div', { class: 'modal-actions' }, cancelBtn, submitBtn),
+      );
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      cleanup = activateModalFocusTrap(overlay, modal, targetInput || durationInput || reasonInput, close);
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay && !busy) close();
+      });
+    }
+
+    function showMessageModerationDeleteModal({ serverId, message, onDeleted = null }) {
+      showTextEntryModal({
+        title: 'Delete Message',
+        subtitle: 'Explain why this message is being removed. The reason is saved to the server audit trail.',
+        label: 'Reason',
+        placeholder: 'Required removal reason',
+        confirmLabel: 'Delete Message',
+        testIdPrefix: 'moderation-delete-message',
+        multiline: true,
+        onSubmit: async (reason) => {
+          if (!reason) throw new Error('A reason is required.');
+          await moderation.deleteMessage(serverId, message.id, { reason });
+          await onDeleted?.();
+          toast('Message deleted by moderation.', 'success');
+        },
+      });
+    }
+
 
     function MessageList(channelId, { onReply = null, onViewportChange = null } = {}) {
-      const root = el('div', { class: 'messages-scroll' });
+      const root = el('div', { class: 'messages-scroll', 'data-testid': 'message-list' });
       let msgList = [];
       let cursor = null;
       let hasMore = false;
@@ -4125,6 +5066,20 @@ If you do not fully understand these risks, do not enable this mode.`;
         );
       }
 
+      function loadError(error) {
+        const retryBtn = el('button', {
+          class: 'btn-soft',
+          type: 'button',
+          onClick: () => void load(true),
+        }, 'Retry');
+        return el('div', { class: 'empty-channel message-load-error' },
+          el('div', { class: 'empty-kicker' }, 'Could not load messages'),
+          el('h4', {}, 'Try again in a moment'),
+          el('p', {}, error?.message || 'Wyvern could not load this channel right now. Your messages are still safe.'),
+          el('div', { class: 'settings-inline-actions' }, retryBtn),
+        );
+      }
+
       async function load(initial = false) {
         if (initial) {
           root.innerHTML = '';
@@ -4160,7 +5115,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         } catch (e) {
           if (initial) {
             root.innerHTML = '';
-            root.appendChild(empty());
+            root.appendChild(loadError(e));
           }
         }
       }
@@ -4236,16 +5191,43 @@ If you do not fully understand these risks, do not enable this mode.`;
           ? { username: msg.webhook_name, display_name: msg.webhook_name, avatar: msg.webhook_avatar }
           : (msg.author || userCache.get(msg.author_id) || { username: 'Unknown', id: msg.author_id });
         const authorLabel = displayName(author);
+        const profileUser = !msg.webhook_name && msg.author_id
+          ? { ...author, id: author.id || msg.author_id }
+          : null;
+        const openAuthorProfile = (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          if (!profileUser?.id) {
+            toast('This profile is unavailable right now.', 'error');
+            return;
+          }
+          showUserProfileModal(profileUser);
+        };
 
         const avatarNode = merged
           ? el('div', { class: 'msg-avatar-gap' })
           : avatarEl(authorLabel, 'msg-av', 40, author.avatar);
+        if (!merged && profileUser?.id) {
+          avatarNode.title = `View ${authorLabel}'s profile`;
+          avatarNode.tabIndex = 0;
+          avatarNode.addEventListener('click', openAuthorProfile);
+          avatarNode.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') openAuthorProfile(event);
+          });
+        }
 
         const metaEl = el('div', { class: 'msg-meta' });
         const nameEl = el('span', {
           class: `msg-author${isMe ? ' is-self' : ''}`,
-          onClick: () => { },
+          onClick: profileUser?.id ? openAuthorProfile : () => { },
         }, authorLabel);
+        if (profileUser?.id) {
+          nameEl.title = `View ${authorLabel}'s profile`;
+          nameEl.tabIndex = 0;
+          nameEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') openAuthorProfile(event);
+          });
+        }
         const timeEl = el('span', { class: 'msg-time' }, fmtTime(msg.created_at));
         metaEl.append(nameEl, timeEl);
         if (communityToolsEnabled() && msg.is_pinned) {
@@ -4373,6 +5355,24 @@ If you do not fully understand these risks, do not enable this mode.`;
         actions.appendChild(
           el('button', { class: 'act-btn', title: 'React', onClick: () => quickReact(msg) }, heroIcon('faceSmile', { size: 16 }))
         );
+        if (!isMe && !msg.pending) {
+          actions.appendChild(
+            el('button', {
+              class: 'act-btn',
+              title: 'Report message',
+              'aria-label': 'Report message',
+              'data-testid': `message-report-${msg.id}`,
+              onClick: (event) => {
+                event.stopPropagation();
+                showReportModal({
+                  targetType: 'message',
+                  targetId: msg.id,
+                  targetLabel: `Message from ${authorLabel}`,
+                });
+              },
+            }, heroIcon('flag', { size: 16 }))
+          );
+        }
         if (communityToolsEnabled()) {
           actions.appendChild(
             el('button', {
@@ -4428,11 +5428,30 @@ If you do not fully understand these risks, do not enable this mode.`;
             }
           }, heroIcon('trash', { size: 16 }));
           actions.append(editBtn, delBtn);
+        } else if (!isDmChannel && channelServerId && canModerateServer(channelServerId) && !msg.pending) {
+          actions.appendChild(el('button', {
+            class: 'act-btn danger',
+            title: 'Delete message as moderator',
+            'aria-label': 'Delete message as moderator',
+            'data-testid': `moderation-delete-message-${msg.id}`,
+            onClick: (event) => {
+              event.stopPropagation();
+              showMessageModerationDeleteModal({
+                serverId: channelServerId,
+                message: msg,
+                onDeleted: async () => {
+                  msgList = msgList.filter((item) => !idsEqual(item.id, msg.id));
+                  renderAll();
+                },
+              });
+            },
+          }, heroIcon('trash', { size: 16 })));
         }
 
         return el('div', {
           class: `msg-group${merged ? ' is-merged' : ''}${msg.pending ? ' is-pending' : ''}`,
           'data-message-id': String(msg.id),
+          'data-testid': `message-item-${msg.id}`,
         }, avatarNode, body, actions);
       }
 
@@ -4699,8 +5718,20 @@ If you do not fully understand these risks, do not enable this mode.`;
       root.replaceTemporaryMessage = (temporaryId, replacement) => {
         const index = msgList.findIndex((item) => idsEqual(item.id, temporaryId));
         if (index < 0) return false;
-        msgList[index] = hydrateMessageState(replacement, msgList[index]);
+        const existingIndex = msgList.findIndex((item, itemIndex) => itemIndex !== index && idsEqual(item.id, replacement?.id));
+        if (existingIndex >= 0) {
+          msgList[existingIndex] = hydrateMessageState(replacement, msgList[existingIndex]);
+          msgList.splice(index, 1);
+        } else {
+          msgList[index] = hydrateMessageState(replacement, msgList[index]);
+        }
         rememberLatestMessage(msgList[msgList.length - 1] || replacement);
+        store.set({
+          messages: {
+            ...(store.state.messages || {}),
+            [idKey(channelId)]: [...msgList],
+          },
+        });
         renderAll();
         return true;
       };
@@ -4736,10 +5767,12 @@ If you do not fully understand these risks, do not enable this mode.`;
 
     function AuthView() {
       let mode = 'login'; // 'login' | 'register'
+      let recoveryEmail = '';
+      let recoveryNotice = '';
 
-      const root = el('div', { class: 'auth-view' });
+      const root = el('div', { class: 'auth-view', 'data-testid': 'auth-view' });
       const bg = el('div', { class: 'auth-bg' });
-      const card = el('div', { class: 'auth-card' });
+      const card = el('div', { class: 'auth-card', 'data-testid': 'auth-card' });
 
       root.append(bg);
       if (isUiA()) {
@@ -4761,11 +5794,16 @@ If you do not fully understand these risks, do not enable this mode.`;
         const errEl = el('div', { class: 'auth-error' });
         errEl.style.display = 'none';
         const legal = legalConfig();
+        const registrationEnabled = runtimeControlEnabled('registration');
 
-        const title = el('div', { class: 'auth-title' }, mode === 'login' ? 'Sign In' : 'Create Account');
+        const title = el('div', { class: 'auth-title' }, mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Recover Account' : 'Reset Password');
         const introCopy = mode === 'register'
           ? el('div', { class: 'auth-copy' }, 'Creating an account requires a versioned clickwrap agreement. Review the current Terms of Service and Privacy Policy before continuing.')
-          : null;
+          : mode === 'recovery'
+            ? el('div', { class: 'auth-copy' }, 'Enter your email. If it belongs to an active account, we will send a six-digit recovery code.')
+            : mode === 'recovery-confirm'
+              ? el('div', { class: 'auth-copy' }, `Enter code sent to ${recoveryEmail}, then choose a new password.`)
+              : recoveryNotice ? el('div', { class: 'auth-copy' }, recoveryNotice) : null;
 
         const fields = [];
         if (mode === 'register') {
@@ -4774,8 +5812,14 @@ If you do not fully understand these risks, do not enable this mode.`;
           fields.push(displayNameField, usernameField);
         }
         const emailField = mkField('Email', 'email', 'email', 'you@example.com');
-        const passField = mkField('Password', 'password', 'password', '••••••••');
-        fields.push(emailField, passField);
+        if (mode === 'recovery-confirm') {
+          const emailInput = emailField.querySelector('[data-field="email"]');
+          emailInput.value = recoveryEmail;
+          emailInput.readOnly = true;
+        }
+        fields.push(emailField);
+        if (mode === 'recovery-confirm') fields.push(mkField('Recovery Code', 'text', 'recoveryCode', '123456'));
+        if (mode !== 'recovery') fields.push(mkField(mode === 'recovery-confirm' ? 'New Password' : 'Password', 'password', 'password', '••••••••'));
         const legalLinks = mode === 'register'
           ? el('div', { class: 'auth-inline-links' },
             legalLink('Terms of Service', legal.terms_url),
@@ -4788,24 +5832,34 @@ If you do not fully understand these risks, do not enable this mode.`;
 
         const submitBtn = el('button', {
           class: 'btn-primary',
+          disabled: mode === 'register' && !registrationEnabled,
+          'data-testid': mode === 'login' ? 'auth-login-submit' : mode === 'register' ? 'auth-register-submit' : mode === 'recovery' ? 'auth-recovery-request' : 'auth-recovery-confirm',
           onClick: handleSubmit
-        }, mode === 'login' ? 'Sign In' : 'Create Account');
+        }, mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Send Recovery Code' : 'Reset Password');
 
         const switchEl = el('div', { class: 'auth-switch' });
         if (mode === 'login') {
           switchEl.append(
             document.createTextNode("Don't have an account?"),
-            el('button', { onClick: () => { mode = 'register'; render(); } }, 'Register')
+            registrationEnabled
+              ? el('button', { onClick: () => { mode = 'register'; render(); }, 'data-testid': 'auth-switch-register' }, 'Register')
+              : el('span', { class: 'auth-registration-closed' }, 'Registration is temporarily unavailable.')
           );
+          switchEl.append(document.createTextNode(' · '), el('button', { onClick: () => { mode = 'recovery'; recoveryNotice = ''; render(); }, 'data-testid': 'auth-forgot-password' }, 'Forgot password?'));
+        } else if (mode === 'recovery' || mode === 'recovery-confirm') {
+          switchEl.append(document.createTextNode('Remembered your password?'), el('button', { onClick: () => { mode = 'login'; render(); }, 'data-testid': 'auth-switch-login' }, 'Sign In'));
         } else {
           switchEl.append(
             document.createTextNode('Already have an account?'),
-            el('button', { onClick: () => { mode = 'login'; render(); } }, 'Sign In')
+            el('button', { onClick: () => { mode = 'login'; render(); }, 'data-testid': 'auth-switch-login' }, 'Sign In')
           );
         }
 
         card.append(logo(), title);
         if (introCopy) card.appendChild(introCopy);
+        if (mode === 'register' && !registrationEnabled) {
+          card.appendChild(el('div', { class: 'auth-error' }, runtimeControlUnavailableMessage('registration')));
+        }
         card.appendChild(errEl);
         fields.forEach((field) => card.appendChild(field));
         if (legalLinks) card.appendChild(legalLinks);
@@ -4819,6 +5873,7 @@ If you do not fully understand these risks, do not enable this mode.`;
 
           const email = card.querySelector('[data-field="email"]')?.value.trim();
           const password = card.querySelector('[data-field="password"]')?.value;
+          const recoveryCode = card.querySelector('[data-field="recoveryCode"]')?.value.trim();
           const username = card.querySelector('[data-field="username"]')?.value.trim();
           const displayName = card.querySelector('[data-field="displayName"]')?.value.trim();
           const acceptedLegal = !!card.querySelector('[data-field="acceptedLegal"]')?.checked;
@@ -4826,7 +5881,22 @@ If you do not fully understand these risks, do not enable this mode.`;
           try {
             if (mode === 'login') {
               await auth.login(email, password);
+            } else if (mode === 'recovery') {
+              await auth.passwordRecovery.request(email);
+              recoveryEmail = email;
+              mode = 'recovery-confirm';
+              render();
+              return;
+            } else if (mode === 'recovery-confirm') {
+              await auth.passwordRecovery.confirm(email, recoveryCode, password);
+              mode = 'login';
+              recoveryNotice = 'Password reset. Sign in with your new password.';
+              render();
+              return;
             } else {
+              if (!registrationEnabled) {
+                throw new Error(runtimeControlUnavailableMessage('registration'));
+              }
               if (!acceptedLegal) {
                 throw new Error('Please accept the Terms of Service and Privacy Policy to create an account.');
               }
@@ -4848,7 +5918,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             errEl.textContent = err?.message || 'Something went wrong. Please try again.';
             errEl.style.display = 'block';
             submitBtn.disabled = false;
-            submitBtn.textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+            submitBtn.textContent = mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : mode === 'recovery' ? 'Send Recovery Code' : 'Reset Password';
           }
         }
 
@@ -4861,7 +5931,7 @@ If you do not fully understand these risks, do not enable this mode.`;
       function mkField(label, type, key, placeholder) {
         const wrap = el('div', { class: 'auth-field' });
         const lbl = el('label', {}, label);
-        const input = el('input', { type, placeholder });
+        const input = el('input', { type, placeholder, 'data-testid': `auth-${key}` });
         input.setAttribute('data-field', key);
         wrap.append(lbl, input);
         return wrap;
@@ -4872,7 +5942,7 @@ If you do not fully understand these risks, do not enable this mode.`;
       }
 
       function mkLegalCheckbox(legal, inputId) {
-        const checkbox = el('input', { id: inputId, type: 'checkbox' });
+        const checkbox = el('input', { id: inputId, type: 'checkbox', 'data-testid': 'auth-acceptedLegal' });
         checkbox.setAttribute('data-field', 'acceptedLegal');
         return el('label', { class: 'auth-check', for: inputId },
           checkbox,
@@ -4980,6 +6050,31 @@ If you do not fully understand these risks, do not enable this mode.`;
       return root;
     }
 
+    function MaintenanceView() {
+      const root = el('div', { class: 'auth-view maintenance-view', 'data-testid': 'maintenance-view' });
+      const bg = el('div', { class: 'auth-bg' });
+      const card = el('div', { class: 'auth-card maintenance-card' },
+        el('div', { class: 'auth-logo' },
+          el('div', { class: 'auth-logo-icon' }, el('img', { src: WYVERN_LOGO_URL, alt: 'Wyvern logo' })),
+          el('span', { class: 'auth-logo-text' }, 'WYVERN'),
+        ),
+        el('div', { class: 'maintenance-kicker' }, 'Scheduled maintenance'),
+        el('div', { class: 'auth-title' }, 'We’ll be right back'),
+        el('div', { class: 'auth-copy' }, maintenanceMessage()),
+        el('div', { class: 'maintenance-status' },
+          el('span', { class: 'maintenance-status-dot' }),
+          el('span', {}, 'Service updates are in progress')
+        ),
+        store.state.user ? el('div', { class: 'auth-actions' },
+          el('button', { class: 'btn-ghost', type: 'button', onClick: () => void signOutUser() }, 'Sign Out')
+        ) : null,
+      );
+      root.append(bg);
+      if (isUiA()) root.appendChild(authStoryPanel());
+      root.appendChild(card);
+      return root;
+    }
+
     function buildEdgeIframeSrc(cacheBust = Date.now()) {
       const url = new URL(`${edgePathPrefix()}/`, window.location.origin);
       url.searchParams.set('embedded', '1');
@@ -5048,7 +6143,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         if (event.origin !== window.location.origin) return;
         if (event.data?.type !== 'wyvern.edge.disable') return;
         setEdgeModeEnabled(false);
-        store.set({ view: 'app' });
+        store.set({ view: resolvePostAuthView(store.state.user) });
       };
 
       window.addEventListener('message', handleMessage);
@@ -5074,6 +6169,127 @@ If you do not fully understand these risks, do not enable this mode.`;
     let socket = null;
     let msgListEl = null;
 
+    function createEmailVerificationBanner({ blocking = false } = {}) {
+      const user = store.state.user;
+      if (!user || isEmailVerified(user)) return null;
+
+      const banner = el('section', { class: 'verification-banner', role: 'region', 'aria-label': 'Email verification', 'data-testid': 'email-verification-banner' });
+      if (blocking) banner.classList.add('verification-gate-panel');
+      const codeInput = el('input', {
+        class: 'verification-code-input',
+        type: 'text',
+        inputmode: 'numeric',
+        autocomplete: 'one-time-code',
+        maxlength: '6',
+        placeholder: '6-digit code',
+        'aria-label': 'Email verification code',
+        'data-testid': 'email-verification-code',
+      });
+      const requestBtn = el('button', { class: 'btn-soft', type: 'button', 'data-testid': 'email-verification-request' }, 'Send code');
+      const confirmBtn = el('button', { class: 'btn-confirm', type: 'button', 'data-testid': 'email-verification-confirm' }, 'Verify');
+      const statusEl = el('div', { class: 'verification-status', role: 'status' }, 'Verify your email to unlock API tokens, webhooks, and high-cost actions.');
+      let busy = false;
+      let requested = false;
+
+      const setBusy = (value, action = '') => {
+        busy = !!value;
+        codeInput.disabled = busy;
+        requestBtn.disabled = busy;
+        confirmBtn.disabled = busy;
+        requestBtn.textContent = busy && action === 'request' ? 'Sending...' : (requested ? 'Resend code' : 'Send code');
+        confirmBtn.textContent = busy && action === 'confirm' ? 'Verifying...' : 'Verify';
+      };
+      const requestCode = async () => {
+        if (busy) return;
+        setBusy(true, 'request');
+        try {
+          await auth.verification.request();
+          requested = true;
+          statusEl.textContent = `A six-digit code was sent to ${user.email || 'your email address'}. It expires in 15 minutes.`;
+          codeInput.focus();
+        } catch (error) {
+          statusEl.textContent = error?.message || 'Could not send a verification code. Please try again.';
+          statusEl.classList.add('is-error');
+        } finally {
+          setBusy(false);
+        }
+      };
+      const confirmCode = async () => {
+        if (busy) return;
+        const code = String(codeInput.value || '').replace(/\D/g, '').slice(0, 6);
+        codeInput.value = code;
+        if (code.length !== 6) {
+          statusEl.textContent = 'Enter the six-digit code from your email.';
+          statusEl.classList.add('is-error');
+          codeInput.focus();
+          return;
+        }
+        setBusy(true, 'confirm');
+        try {
+          const result = await auth.verification.confirm(code);
+          let updated = result?.user || result?.account || null;
+          if (!updated?.id) {
+            updated = await users.me();
+          }
+          const nextUser = await enrichUserPresence({ ...store.state.user, ...updated, email_verified_at: updated?.email_verified_at || new Date().toISOString(), email_verified: true });
+          userCache.set(nextUser.id, nextUser);
+          store.set({ user: nextUser, isAuthed: true, view: resolvePostAuthView(nextUser) });
+          banner.remove();
+          toast('Email verified. Account tools are now available.', 'success');
+        } catch (error) {
+          statusEl.textContent = error?.message || 'That code could not be verified. Check the code and try again.';
+          statusEl.classList.add('is-error');
+          codeInput.focus();
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      requestBtn.addEventListener('click', requestCode);
+      confirmBtn.addEventListener('click', confirmCode);
+      codeInput.addEventListener('input', () => {
+        codeInput.value = String(codeInput.value || '').replace(/\D/g, '').slice(0, 6);
+        statusEl.classList.remove('is-error');
+      });
+      codeInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          void confirmCode();
+        }
+      });
+
+      banner.append(
+        el('div', { class: 'verification-banner-copy' },
+          el('div', { class: 'verification-banner-title' }, 'Verify your email'),
+          statusEl,
+        ),
+        el('div', { class: 'verification-banner-actions' }, codeInput, requestBtn, confirmBtn),
+      );
+      return banner;
+    }
+
+    function EmailVerificationView() {
+      const root = el('div', { class: 'auth-view email-verification-view', 'data-testid': 'email-verification-view' });
+      const bg = el('div', { class: 'auth-bg' });
+      const card = el('div', { class: 'auth-card verification-gate-card' });
+      const panel = createEmailVerificationBanner({ blocking: true });
+
+      root.append(bg);
+      if (isUiA()) root.appendChild(authStoryPanel());
+      root.appendChild(card);
+      card.append(
+        el('div', { class: 'auth-logo' },
+          el('div', { class: 'auth-logo-icon' }, el('img', { src: WYVERN_LOGO_URL, alt: 'Wyvern logo' })),
+          el('span', { class: 'auth-logo-text' }, 'WYVERN')
+        ),
+        el('div', { class: 'auth-title' }, 'Verify your email'),
+        el('div', { class: 'auth-copy' }, 'Before you can use Wyvern, confirm that you control this email address. We will send a six-digit code to the address on your account.'),
+      );
+      if (panel) card.appendChild(panel);
+      card.appendChild(el('button', { class: 'btn-ghost', type: 'button', onClick: () => void signOutUser(), 'data-testid': 'email-verification-signout' }, 'Sign Out'));
+      return root;
+    }
+
     function AppView() {
       const root = el('div', { class: 'app-layout' });
       root.dataset.shellVariant = shellRefreshEnabled() ? 'modern' : 'legacy';
@@ -5097,6 +6313,8 @@ If you do not fully understand these risks, do not enable this mode.`;
       });
 
       root.append(overlay, iconSidebar, chanSidebar, chatMain, memberSidebar);
+      const verificationBanner = createEmailVerificationBanner();
+      if (verificationBanner) root.appendChild(verificationBanner);
       const edgeUiLabLink = createEdgeUiLabLink();
       if (edgeUiLabLink) root.appendChild(edgeUiLabLink);
       let composerEl = null;
@@ -5298,6 +6516,19 @@ If you do not fully understand these risks, do not enable this mode.`;
         return allKnownChannels().find((item) => idsEqual(item?.id, target)) || null;
       }
 
+      function voiceParticipantCount(channelId) {
+        return Array.from(new Set((store.state.voiceParticipants?.[idKey(channelId)] || []).map(idKey).filter(Boolean))).length;
+      }
+
+      function callStateForChannel(channelId) {
+        const normalizedChannelId = idKey(channelId);
+        if (!normalizedChannelId) return null;
+        if (idsEqual(voiceState.joinedChannelId, normalizedChannelId)) return 'connected';
+        if (idsEqual(voiceState.incomingCall?.channelId, normalizedChannelId)) return 'incoming';
+        if (idsEqual(voiceState.outgoingCall?.channelId, normalizedChannelId)) return 'calling';
+        return voiceParticipantCount(normalizedChannelId) > 0 ? 'active' : null;
+      }
+
       function findServerIdForChannel(channelId) {
         const target = idKey(channelId);
         if (!target) return null;
@@ -5323,6 +6554,10 @@ If you do not fully understand these risks, do not enable this mode.`;
       function openCommunityHubPage(initialTab = 'discover') {
         if (!communityToolsEnabled()) {
           toast('Community tools are not enabled on this channel yet', 'error');
+          return;
+        }
+        if (initialTab === 'workspace' && !runtimeControlEnabled('workspaces')) {
+          toast(runtimeControlUnavailableMessage('workspaces'), 'error');
           return;
         }
         if (store.state.sidebarMode === 'community') {
@@ -5382,12 +6617,17 @@ If you do not fully understand these risks, do not enable this mode.`;
           toast('Community tools are not enabled on this channel yet', 'error');
           return;
         }
+        if (initialTab === 'workspace' && !runtimeControlEnabled('workspaces')) {
+          toast(runtimeControlUnavailableMessage('workspaces'), 'error');
+          return;
+        }
 
         const embedded = !!options.embedded;
         const mount = options.mount || null;
         const activeChannel = findChannelById(store.state.activeChannelId);
         const currentServerId = idKey(store.state.activeServerId || activeChannel?.server_id) || null;
-        const availableTabs = ['discover', 'search', 'pins', 'bookmarks', 'workspace', 'activity'];
+        const availableTabs = ['discover', 'search', 'pins', 'bookmarks', 'activity'];
+        if (runtimeControlEnabled('workspaces')) availableTabs.splice(4, 0, 'workspace');
         const requestedTab = embedded ? (store.state.communityHubTab || initialTab) : initialTab;
         let currentTab = availableTabs.includes(requestedTab) ? requestedTab : 'discover';
         let searchResults = [];
@@ -5395,6 +6635,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         let bookmarkEntries = [];
         let activityEntries = [];
         let workspaceDoc = null;
+        let workspaceGitAccess = null;
         let workspaceDraft = null;
         let discoverUsers = [];
         let discoverServers = [];
@@ -5441,9 +6682,9 @@ If you do not fully understand these risks, do not enable this mode.`;
           { id: 'search', label: 'Search', icon: 'magnifyingGlass' },
           { id: 'pins', label: 'Pins', icon: 'pin' },
           { id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark' },
-          { id: 'workspace', label: 'Workspace', icon: 'pencilSquare' },
+          runtimeControlEnabled('workspaces') ? { id: 'workspace', label: 'Workspace', icon: 'pencilSquare' } : null,
           { id: 'activity', label: 'Activity', icon: 'clock' },
-        ];
+        ].filter(Boolean);
         const isCommunityHubMounted = () => (embedded ? !!mount?.isConnected : !!overlay?.isConnected);
 
         const onCommunityHubEscape = (event) => {
@@ -6799,6 +8040,39 @@ If you do not fully understand these risks, do not enable this mode.`;
             el('div', { class: 'community-workspace-section-title' }, 'Revision History'),
             revisions,
           );
+          const gitPane = el('div', { class: 'community-workspace-pane' },
+            el('div', { class: 'community-workspace-section-title' }, 'Developer Git Access'),
+            el('div', { class: 'community-workspace-context-note' }, 'Workspace saves are mirrored as Git commits. Create a short-lived credential for Git clone and best-effort pushes to main.'),
+          );
+          const gitButton = el('button', { class: 'btn-soft', type: 'button', disabled: !workspaceDoc?.id }, workspaceGitAccess ? 'Create New Git Credential' : 'Create Git Credential');
+          gitButton.addEventListener('click', async () => {
+            if (!workspaceDoc?.id) {
+              await saveWorkspace(true);
+              if (!workspaceDoc?.id) return;
+            }
+            const name = window.prompt('Name this Git credential', 'Developer machine');
+            if (!name?.trim()) return;
+            try {
+              workspaceGitAccess = await community.workspace.git.createCredential(workspaceChannel.id, workspaceVisibility, { name: name.trim(), expires_in_days: 30 });
+              renderBody();
+            } catch (error) {
+              toast(error?.message || 'Could not create a Git credential', 'error');
+            }
+          });
+          gitPane.append(gitButton);
+          if (workspaceGitAccess?.token && workspaceGitAccess?.clone_url) {
+            const cloneCommand = `git clone https://git:${workspaceGitAccess.token}@${String(workspaceGitAccess.clone_url).replace(/^https?:\/\//, '')}`;
+            const command = el('textarea', { class: 'community-workspace-editor code', readonly: 'readonly', rows: '3', 'aria-label': 'Git clone command' });
+            command.value = cloneCommand;
+            const warning = el('div', { class: 'community-workspace-context-note' }, 'Copy this now. The token is only shown once. Pushes are limited to one README.md file on main, must fast-forward, support packs up to 1 MiB, and each Workspace Git repository is capped at 1 MiB.');
+            const copy = el('button', { class: 'btn-soft', type: 'button' }, 'Copy command');
+            copy.addEventListener('click', async () => {
+              try { await navigator.clipboard.writeText(cloneCommand); toast('Git clone command copied', 'success'); }
+              catch { command.focus(); command.select(); toast('Select and copy the command manually', 'error'); }
+            });
+            gitPane.append(command, warning, copy);
+          }
+          sidePane.append(gitPane);
 
           const workspaceTargetNote = workspaceTargetMode === 'dm'
             ? 'Choose a direct message, then edit that conversation workspace.'
@@ -7272,7 +8546,7 @@ If you do not fully understand these risks, do not enable this mode.`;
         await selectChannel(target);
       }
 
-      async function notifyIncomingMessage(message) {
+      async function notifyIncomingMessage(message, { playSound = false } = {}) {
         if (!message?.channel_id) return;
         const currentUserId = store.state.user?.id;
         if (currentUserId && idsEqual(message.author_id, currentUserId)) return;
@@ -7287,7 +8561,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           authorName = displayName(cached || { username: 'Unknown' });
         }
 
-        playSoundEffect('ping');
+        if (playSound) playSoundEffect('ping');
 
         const preview = messagePreviewText(message, 120);
         const channelLabel = resolveChannelLabel(message.channel_id);
@@ -7371,6 +8645,80 @@ If you do not fully understand these risks, do not enable this mode.`;
         if (!voiceState.statusPollTimer) return;
         clearInterval(voiceState.statusPollTimer);
         voiceState.statusPollTimer = null;
+      }
+
+      let incomingCallNotice = null;
+
+      function directCallRecipientId(channel) {
+        const myUserId = idKey(store.state.user?.id);
+        const recipient = (channel?.participants || []).find((participant) => !idsEqual(participant?.id || participant?.user_id, myUserId));
+        return idKey(recipient?.id || recipient?.user_id);
+      }
+
+      function incomingCallLabel(call) {
+        const caller = userCache.get(call?.fromUserId);
+        return displayName(caller || { username: 'Someone' });
+      }
+
+      function renderIncomingCallNotice() {
+        incomingCallNotice?.remove();
+        incomingCallNotice = null;
+        const call = voiceState.incomingCall;
+        if (!call) return;
+
+        const channel = findChannelById(call.channelId);
+        const callerLabel = incomingCallLabel(call);
+        const notice = el('aside', { class: 'incoming-call-notice', role: 'status', 'aria-live': 'polite', 'data-testid': 'incoming-call-notice' },
+          el('div', { class: 'incoming-call-pulse', 'aria-hidden': 'true' }, heroIcon('phone', { size: 20 })),
+          el('div', { class: 'incoming-call-copy' },
+            el('div', { class: 'incoming-call-eyebrow' }, 'Incoming call'),
+            el('div', { class: 'incoming-call-title' }, callerLabel),
+            el('div', { class: 'incoming-call-subtitle' }, channel?.type === 'dm' ? 'is calling you privately' : `is calling in ${resolveChannelLabel(call.channelId)}`),
+          ),
+          el('div', { class: 'incoming-call-actions' },
+            el('button', { class: 'incoming-call-btn decline', type: 'button', onClick: () => declineIncomingVoiceCall(), 'data-testid': 'incoming-call-decline' }, 'Decline'),
+            el('button', { class: 'incoming-call-btn accept', type: 'button', onClick: () => void acceptIncomingVoiceCall(), 'data-testid': 'incoming-call-accept' }, 'Join call'),
+          ),
+        );
+        incomingCallNotice = notice;
+        document.body.appendChild(notice);
+      }
+
+      function clearIncomingVoiceCall() {
+        voiceState.incomingCall = null;
+        stopCallRingtone();
+        renderIncomingCallNotice();
+        renderChanSidebar();
+      }
+
+      function showIncomingVoiceCall(data) {
+        const channelId = idKey(data?.channel_id);
+        const fromUserId = idKey(data?.from_user_id);
+        if (!channelId || !fromUserId || idsEqual(fromUserId, store.state.user?.id) || idsEqual(voiceState.joinedChannelId, channelId)) return;
+        const existing = voiceState.incomingCall;
+        if (existing && idsEqual(existing.channelId, channelId) && idsEqual(existing.fromUserId, fromUserId)) return;
+        voiceState.incomingCall = { channelId, fromUserId, receivedAt: Date.now() };
+        voiceState.outgoingCall = null;
+        startCallRingtone();
+        renderIncomingCallNotice();
+        renderChanSidebar();
+        getUserCached(fromUserId).then(() => renderIncomingCallNotice()).catch(() => { });
+      }
+
+      async function acceptIncomingVoiceCall() {
+        const call = voiceState.incomingCall;
+        if (!call) return;
+        await joinVoiceChannel(call.channelId);
+        if (!idsEqual(voiceState.joinedChannelId, call.channelId)) return;
+        sendCallSignal(call.fromUserId, call.channelId, 'accepted', { accepted_at: new Date().toISOString() });
+        clearIncomingVoiceCall();
+      }
+
+      function declineIncomingVoiceCall() {
+        const call = voiceState.incomingCall;
+        if (!call) return;
+        sendCallSignal(call.fromUserId, call.channelId, 'decline', { declined_at: new Date().toISOString() });
+        clearIncomingVoiceCall();
       }
 
       function destroyRemoteAudioElement(userId) {
@@ -7489,6 +8837,12 @@ If you do not fully understand these risks, do not enable this mode.`;
         const normalizedUsers = Array.from(new Set((userIds || []).map(idKey).filter(Boolean)));
         if (!normalizedChannelId) return;
         ensureVoiceParticipantsEntry(normalizedChannelId, normalizedUsers);
+        if (voiceState.incomingCall
+          && idsEqual(voiceState.incomingCall.channelId, normalizedChannelId)
+          && !normalizedUsers.some((userId) => idsEqual(userId, voiceState.incomingCall.fromUserId))) {
+          clearIncomingVoiceCall();
+        }
+        renderChanSidebar();
 
         if (idsEqual(store.state.activeChannelId, normalizedChannelId)) {
           renderChatMain();
@@ -7523,6 +8877,32 @@ If you do not fully understand these risks, do not enable this mode.`;
         const fromUserId = idKey(data?.from_user_id);
         const signalType = String(data?.signal_type || '').toLowerCase();
         if (!channelId || !fromUserId || !signalType) return;
+
+        if (signalType === 'ring') {
+          showIncomingVoiceCall(data);
+          return;
+        }
+        if (signalType === 'accepted') {
+          if (voiceState.outgoingCall && idsEqual(voiceState.outgoingCall.channelId, channelId) && idsEqual(voiceState.outgoingCall.targetUserId, fromUserId)) {
+            voiceState.outgoingCall = null;
+            toast(`${incomingCallLabel({ fromUserId })} joined the call.`, 'success');
+            renderChanSidebar();
+            renderChatMain();
+          }
+          return;
+        }
+        if (signalType === 'decline' || signalType === 'hangup') {
+          if (voiceState.incomingCall && idsEqual(voiceState.incomingCall.channelId, channelId) && idsEqual(voiceState.incomingCall.fromUserId, fromUserId)) {
+            clearIncomingVoiceCall();
+          }
+          if (voiceState.outgoingCall && idsEqual(voiceState.outgoingCall.channelId, channelId) && idsEqual(voiceState.outgoingCall.targetUserId, fromUserId)) {
+            voiceState.outgoingCall = null;
+            toast(signalType === 'decline' ? 'Call declined.' : 'Call ended.', 'info');
+            renderChanSidebar();
+            renderChatMain();
+          }
+          return;
+        }
         if (!idsEqual(voiceState.joinedChannelId, channelId)) return;
 
         try {
@@ -7560,6 +8940,12 @@ If you do not fully understand these risks, do not enable this mode.`;
         if (!channelId) return;
         stopVoiceStatusPolling();
 
+        const outgoingCall = voiceState.outgoingCall;
+        if (sendSignal && outgoingCall && idsEqual(outgoingCall.channelId, channelId)) {
+          sendCallSignal(outgoingCall.targetUserId, channelId, 'hangup', { ended_at: new Date().toISOString() });
+        }
+        voiceState.outgoingCall = null;
+
         if (sendSignal && socket && store.state.wsConnected) {
           socket.send({ action: 'leave_voice', channel_id: channelId });
         }
@@ -7594,6 +8980,10 @@ If you do not fully understand these risks, do not enable this mode.`;
       }
 
       async function joinVoiceChannel(channelId) {
+        if (!runtimeControlEnabled('voice')) {
+          toast(runtimeControlUnavailableMessage('voice'), 'error');
+          return;
+        }
         const channel = findChannelById(channelId);
         if (!channel || !['voice', 'dm'].includes(channel.type)) {
           toast('This channel does not support voice', 'error');
@@ -7624,8 +9014,16 @@ If you do not fully understand these risks, do not enable this mode.`;
           socket.send({ action: 'join_voice', channel_id: idKey(channelId) });
           socket.send({ action: 'voice.status', channel_id: idKey(channelId) });
         }
+        if (channel.type === 'dm' && !voiceState.incomingCall) {
+          const targetUserId = directCallRecipientId(channel);
+          if (targetUserId) {
+            voiceState.outgoingCall = { channelId: idKey(channelId), targetUserId, startedAt: Date.now() };
+            sendCallSignal(targetUserId, idKey(channelId), 'ring', { started_at: new Date().toISOString() });
+          }
+        }
         startVoiceStatusPolling(channelId);
 
+        renderChanSidebar();
         renderChatMain();
       }
 
@@ -7820,14 +9218,17 @@ If you do not fully understand these risks, do not enable this mode.`;
             if (msgListEl && idsEqual(event.data?.channel_id || event.channel_id, store.state.activeChannelId)) {
               msgListEl.addMessage(event.data);
             }
+            rememberLatestMessage(event.data);
+            const messageChannelId = event.data?.channel_id || event.channel_id;
+            const isActiveMessageChannel = idsEqual(messageChannelId, store.state.activeChannelId);
+            const createsUnreadMessage = !isActiveMessageChannel || !msgListEl?.isNearBottom?.();
             if (!idsEqual(event.data?.author_id, store.state.user?.id)) {
               void (async () => {
                 await ensureIncomingDmVisible(event.data, event.channel || event.data?.channel || null);
-                await notifyIncomingMessage(event.data);
+                await notifyIncomingMessage(event.data, { playSound: createsUnreadMessage });
               })();
             }
-            rememberLatestMessage(event.data);
-            if (idsEqual(event.data?.channel_id || event.channel_id, store.state.activeChannelId)) {
+            if (isActiveMessageChannel) {
               if (msgListEl?.isNearBottom?.() || idsEqual(event.data?.author_id, store.state.user?.id)) {
                 void markChannelRead(event.data?.channel_id || event.channel_id, event.data?.id);
               }
@@ -7910,6 +9311,18 @@ If you do not fully understand these risks, do not enable this mode.`;
             }
             break;
           }
+          case 'voice.timeout':
+            if (voiceState.joinedChannelId) {
+              void leaveVoiceChannel(false);
+              toast('Voice participation ended because you are timed out in this server.', 'error');
+            }
+            break;
+          case 'realtime.denied':
+            if (event.data?.action === 'join_voice' || event.data?.action === 'voice.status') {
+              if (voiceState.joinedChannelId) void leaveVoiceChannel(false);
+              toast(event.data?.message || 'That realtime action is not available.', 'error');
+            }
+            break;
           case 'typing.updated':
             setTypingUsersForChannel(event.data?.channel_id || event.channel_id, event.data?.user_ids || []);
             for (const userId of (event.data?.user_ids || [])) {
@@ -8175,6 +9588,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           const addBtn = el('div', {
             class: 'server-pill-add',
             title: 'Create Server',
+            'data-testid': 'server-create-trigger',
             onClick: () => showSettingsModal({
               title: 'Create Server',
               subtitle: 'Set up a name and icon for your server.',
@@ -8191,6 +9605,7 @@ If you do not fully understand these risks, do not enable this mode.`;
               toggleHelp: 'Allow anyone to discover this server in the public directory.',
               initialToggle: false,
               saveLabel: 'Create Server',
+              testIdPrefix: 'server-create',
               requireName: true,
               onSave: async ({ name, icon, details, toggle }) => {
                 const srv = await servers.create(name, icon, details || null, !!toggle);
@@ -8241,6 +9656,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           active = false,
           avatar = null,
           icon = null,
+          testId = null,
           onClick,
         }) {
           const row = el('button', {
@@ -8248,6 +9664,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             type: 'button',
             title,
             'aria-label': title,
+            'data-testid': testId || null,
             onClick,
           });
           const copy = el('div', { class: 'sidebar-nav-copy' },
@@ -8266,6 +9683,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           active = false,
           avatar = null,
           icon = null,
+          testId = null,
           onClick,
           unread = false,
         }) {
@@ -8274,6 +9692,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             type: 'button',
             title,
             'aria-label': title,
+            'data-testid': testId || null,
             onClick,
           }, buildSidebarVisual({ label, avatar, icon }));
           if (unread) {
@@ -8292,6 +9711,7 @@ If you do not fully understand these risks, do not enable this mode.`;
               type: 'button',
               title: 'Open Direct Messages',
               'aria-label': 'Open Direct Messages',
+              'data-testid': 'nav-direct-messages',
               onClick: async () => {
                 store.set({ sidebarMode: 'dms', activeServerId: null, activeChannelId: null });
                 const list = await dms.list().catch(() => []);
@@ -8322,6 +9742,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             title: 'Direct Messages',
             active: dmHomeActive,
             icon: heroIcon('chatBubble', { size: 18 }),
+            testId: 'nav-direct-messages',
             unread: (store.state.dmList || []).some((dm) => channelHasUnread(dm.id)),
             onClick: async () => {
               store.set({ sidebarMode: 'dms', activeServerId: null });
@@ -8339,6 +9760,7 @@ If you do not fully understand these risks, do not enable this mode.`;
               title: srv.name,
               active: idsEqual(srv.id, activeServerId),
               avatar: srv.icon || null,
+              testId: `server-nav-${srv.id}`,
               unread: ((store.state.channels?.[srv.id] || []).some((channel) => channelHasUnread(channel.id))),
               onClick: () => selectServer(srv.id),
             }));
@@ -8351,6 +9773,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             label: 'Create Server',
             title: 'Create Server',
             icon: heroIcon('plus', { size: 18 }),
+            testId: 'server-create-trigger',
             onClick: () => showSettingsModal({
               title: 'Create Server',
               subtitle: 'Set up a name and icon for your server.',
@@ -8367,6 +9790,7 @@ If you do not fully understand these risks, do not enable this mode.`;
               toggleHelp: 'Allow anyone to discover this server in the public directory.',
               initialToggle: false,
               saveLabel: 'Create Server',
+              testIdPrefix: 'server-create',
               requireName: true,
               onSave: async ({ name, icon, details, toggle }) => {
                 const srv = await servers.create(name, icon, details || null, !!toggle);
@@ -8396,6 +9820,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             label: 'Settings',
             title: 'Open Settings',
             icon: heroIcon('cog', { size: 18 }),
+            testId: 'settings-open-trigger',
             onClick: () => showSettingsHub(defaultSettingsSection()),
           }));
           iconSidebar.appendChild(footer);
@@ -8407,6 +9832,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           class: `sidebar-brand-row${dmHomeActive ? ' active' : ''}`,
           type: 'button',
           title: 'Direct Messages',
+          'data-testid': 'nav-direct-messages',
           onClick: async () => {
             store.set({ sidebarMode: 'dms', activeServerId: null, activeChannelId: null });
             const list = await dms.list().catch(() => []);
@@ -8442,6 +9868,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             label: 'Settings',
             meta: 'Profile, status, and developer controls',
             icon: heroIcon('cog', { size: 18 }),
+            testId: 'settings-open-trigger',
             onClick: () => showSettingsHub(defaultSettingsSection()),
           }));
           iconSidebar.appendChild(utilitySection);
@@ -8461,6 +9888,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             title: label,
             active: sidebarMode === 'dms' && idsEqual(dm.id, activeChannelId),
             avatar: other?.avatar || null,
+            testId: `dm-nav-${dm.id}`,
             onClick: async () => {
               store.set({ sidebarMode: 'dms', activeServerId: null });
               renderChanSidebar();
@@ -8480,6 +9908,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             title: srv.name,
             active: idsEqual(srv.id, activeServerId),
             avatar: srv.icon || null,
+            testId: `server-nav-${srv.id}`,
             onClick: () => selectServer(srv.id),
           }));
         }
@@ -8493,6 +9922,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           label: 'Create Server',
           meta: 'Start a new community space',
           icon: heroIcon('plus', { size: 18 }),
+          testId: 'server-create-trigger',
           onClick: () => showSettingsModal({
             title: 'Create Server',
             subtitle: 'Set up a name and icon for your server.',
@@ -8509,6 +9939,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             toggleHelp: 'Allow anyone to discover this server in the public directory.',
             initialToggle: false,
             saveLabel: 'Create Server',
+            testIdPrefix: 'server-create',
             requireName: true,
             onSave: async ({ name, icon, details, toggle }) => {
               const srv = await servers.create(name, icon, details || null, !!toggle);
@@ -8595,16 +10026,19 @@ If you do not fully understand these risks, do not enable this mode.`;
           }, heroIcon('link', { size: 18 }));
           rightActions.appendChild(inviteBtn);
 
-          const editServerBtn = el('button', {
-            class: 'topbar-btn',
-            title: 'Edit Server',
-            'aria-label': 'Edit Server',
-            onClick: async (e) => {
-              e.stopPropagation();
-              showServerSettingsHub(activeServerId, 'overview');
-            }
-          }, heroIcon('cog', { size: 18 }));
-          rightActions.appendChild(editServerBtn);
+          if (canManageServerSettings(activeServerId) || canModerateServer(activeServerId)) {
+            const canEditSettings = canManageServerSettings(activeServerId);
+            const editServerBtn = el('button', {
+              class: 'topbar-btn',
+              title: canEditSettings ? 'Server Settings' : 'Server Moderation',
+              'aria-label': canEditSettings ? 'Open Server Settings' : 'Open Server Moderation',
+              onClick: async (e) => {
+                e.stopPropagation();
+                showServerSettingsHub(activeServerId, canEditSettings ? 'overview' : 'moderation');
+              }
+            }, heroIcon(canEditSettings ? 'cog' : 'flag', { size: 18 }));
+            rightActions.appendChild(editServerBtn);
+          }
         }
         if (!communityToolsEnabled()) {
           rightActions.appendChild(el('button', {
@@ -8682,12 +10116,20 @@ If you do not fully understand these risks, do not enable this mode.`;
             const icon = ch.type === 'voice'
               ? heroIcon('speakerWave', { size: 16 })
               : heroIcon('hashtag', { size: 16 });
-            const item = el('div', {
-              class: `ch-item${idsEqual(ch.id, activeChannelId) ? ' active' : ''}`,
+            const voiceCount = ch.type === 'voice' ? voiceParticipantCount(ch.id) : 0;
+            const callState = ch.type === 'voice' ? callStateForChannel(ch.id) : null;
+          const item = el('div', {
+              class: `ch-item${idsEqual(ch.id, activeChannelId) ? ' active' : ''}${callState ? ` voice-active voice-${callState}` : ''}`,
+              'data-testid': `channel-nav-${ch.id}`,
               onClick: () => selectChannel(ch.id)
             },
               el('span', { class: 'ch-hash' }, icon),
               el('span', { class: 'ch-name' }, ch.name),
+              voiceCount > 0 ? el('span', { class: 'voice-channel-presence', title: `${voiceCount} ${voiceCount === 1 ? 'person' : 'people'} in voice` },
+                heroIcon('phone', { size: 12 }),
+                el('span', {}, String(voiceCount)),
+              ) : null,
+              callState === 'incoming' ? el('span', { class: 'voice-call-incoming-dot', title: 'Incoming call' }) : null,
               channelHasUnread(ch.id) ? el('span', { class: 'sidebar-unread-dot' }) : null
             );
             scroll.appendChild(item);
@@ -8696,10 +10138,13 @@ If you do not fully understand these risks, do not enable this mode.`;
 
         if (!chans.length && activeServerId) {
           const addFirst = el('div', {
-            class: 'ch-item', onClick: () => showChannelCreateModal({
+            class: 'ch-item',
+            'data-testid': 'channel-create-trigger',
+            onClick: () => showChannelCreateModal({
               title: 'Create First Channel',
               placeholder: 'general',
               confirmLabel: 'Create',
+              testIdPrefix: 'channel-create',
               onConfirm: async ({ name, type }) => {
                 try {
                   const ch = await channels.create(activeServerId, { name, type });
@@ -8729,12 +10174,15 @@ If you do not fully understand these risks, do not enable this mode.`;
         const list = el('div', { class: 'dm-list' });
 
         const newDm = el('div', {
-          class: 'ch-item', onClick: () => showTextEntryModal({
+          class: 'ch-item',
+          'data-testid': 'dm-create-trigger',
+          onClick: () => showTextEntryModal({
             title: 'Start Direct Message',
             subtitle: 'Enter a username or full username tag to open a new private conversation.',
             label: 'Username',
             placeholder: 'username or username#1234',
             confirmLabel: 'Open DM',
+            testIdPrefix: 'dm-create',
             onSubmit: async (value) => {
               if (!value) throw new Error('Enter a username or username tag.');
               const recipient = await users.lookup(value.trim());
@@ -8756,12 +10204,19 @@ If you do not fully understand these risks, do not enable this mode.`;
         for (const dm of dmList) {
           const label = dmDisplayName(dm);
           const other = dm?.participants?.find((p) => !idsEqual(p.id, store.state.user?.id)) || null;
+          const voiceCount = voiceParticipantCount(dm.id);
+          const callState = callStateForChannel(dm.id);
           const item = el('div', {
-            class: `dm-item${idsEqual(dm.id, activeChannelId) ? ' active' : ''}`,
+            class: `dm-item${idsEqual(dm.id, activeChannelId) ? ' active' : ''}${callState ? ` voice-${callState}` : ''}`,
+            'data-testid': `dm-nav-${dm.id}`,
             onClick: () => selectDm(dm.id)
           },
             avatarEl(label, 'dm-av', 34, other?.avatar),
             el('span', { class: 'dm-name' }, label),
+            callState ? el('span', { class: `dm-call-state ${callState}`, title: callState === 'incoming' ? 'Incoming call' : (callState === 'calling' ? 'Calling' : 'In call') },
+              heroIcon('phone', { size: 12 }),
+              voiceCount > 0 ? el('span', {}, String(voiceCount)) : null,
+            ) : null,
             channelHasUnread(dm.id) ? el('span', { class: 'sidebar-unread-dot' }) : null
           );
           list.appendChild(item);
@@ -8803,6 +10258,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           class: 'panel-btn',
           title: 'Settings',
           'aria-label': 'Open Settings',
+          'data-testid': 'settings-open-trigger',
           onClick: () => showSettingsHub(defaultSettingsSection()),
         }, heroIcon('cog', { size: 16 }));
 
@@ -8820,7 +10276,11 @@ If you do not fully understand these risks, do not enable this mode.`;
         const myUserId = idKey(store.state.user?.id);
         const channelId = idKey(channel?.id);
         const activeCall = idsEqual(voiceState.joinedChannelId, channelId);
-        const participants = Array.from(new Set((store.state.voiceParticipants?.[channelId] || []).map(idKey).filter(Boolean)));
+        const voiceEnabled = runtimeControlEnabled('voice');
+        const participants = Array.from(new Set([
+          ...(store.state.voiceParticipants?.[channelId] || []).map(idKey).filter(Boolean),
+          ...(activeCall && myUserId ? [myUserId] : []),
+        ]));
 
         for (const userId of participants) {
           if (!userCache.has(userId)) {
@@ -8832,18 +10292,27 @@ If you do not fully understand these risks, do not enable this mode.`;
 
         const hero = el('div', { class: 'voice-hero' },
           el('div', { class: 'voice-hero-title' }, channel?.name || 'Voice Channel'),
-          el('div', { class: 'voice-hero-sub' }, activeCall ? 'You are connected to voice chat.' : 'Join this voice chat to start talking.'),
+          el('div', { class: 'voice-hero-sub' }, activeCall
+            ? `${voiceState.muted ? 'You are muted' : 'Your microphone is live'} • ${participants.length} ${participants.length === 1 ? 'person' : 'people'} connected`
+            : (voiceEnabled ? 'Join this voice chat to start talking.' : runtimeControlUnavailableMessage('voice'))),
         );
+        if (activeCall) {
+          hero.appendChild(el('div', { class: 'voice-live-status' },
+            el('span', { class: 'voice-live-dot', 'aria-hidden': 'true' }),
+            el('span', {}, 'In call'),
+            el('span', { class: 'voice-live-count' }, `${participants.length} connected`),
+          ));
+        }
 
         const controls = el('div', { class: 'voice-controls' });
         controls.appendChild(
           activeCall
-            ? el('button', { class: 'voice-btn danger', onClick: () => leaveVoiceChannel(true) }, 'Leave Voice')
-            : el('button', { class: 'voice-btn primary', onClick: () => joinVoiceChannel(channelId) }, 'Join Voice')
+            ? el('button', { class: 'voice-btn danger', onClick: () => leaveVoiceChannel(true) }, 'Leave Call')
+            : el('button', { class: 'voice-btn primary', disabled: !voiceEnabled, onClick: () => joinVoiceChannel(channelId) }, 'Join Voice')
         );
         if (activeCall) {
           controls.appendChild(
-            el('button', { class: 'voice-btn', onClick: () => toggleVoiceMute() }, voiceState.muted ? 'Unmute Mic' : 'Mute Mic')
+            el('button', { class: `voice-btn${voiceState.muted ? ' is-muted' : ''}`, 'aria-pressed': String(voiceState.muted), onClick: () => toggleVoiceMute() }, voiceState.muted ? 'Unmute Mic' : 'Mute Mic')
           );
         }
         hero.appendChild(controls);
@@ -8878,6 +10347,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             row.appendChild(speakingIndicator);
             if (idsEqual(userId, myUserId)) {
               row.appendChild(el('span', { class: 'voice-you' }, 'You'));
+              if (voiceState.muted) row.appendChild(el('span', { class: 'voice-muted-label' }, 'Muted'));
             }
             participantList.appendChild(row);
           }
@@ -8919,14 +10389,15 @@ If you do not fully understand these risks, do not enable this mode.`;
         const isVoice = channel?.type === 'voice';
         const dmLabel = isDm ? dmDisplayName(channel) : null;
         const voiceActive = idsEqual(voiceState.joinedChannelId, activeChannelId);
+        const callState = channel && ['voice', 'dm'].includes(channel.type) ? callStateForChannel(activeChannelId) : null;
 
         const topActions = el('div', { class: 'topbar-actions' });
         if (channel && ['voice', 'dm'].includes(channel.type)) {
           topActions.appendChild(
             el('button', {
-              class: 'topbar-btn',
-              title: voiceActive ? 'Leave Call' : 'Join Call',
-              'aria-label': voiceActive ? 'Leave Call' : 'Join Call',
+              class: `topbar-btn${callState ? ` call-${callState}` : ''}`,
+              title: voiceActive ? 'Leave Call' : (callState === 'incoming' ? 'Incoming Call' : (callState === 'calling' ? 'Calling…' : 'Join Call')),
+              'aria-label': voiceActive ? 'Leave Call' : (callState === 'incoming' ? 'Incoming Call' : (callState === 'calling' ? 'Calling' : 'Join Call')),
               onClick: async () => {
                 if (voiceActive) await leaveVoiceChannel(true);
                 else await joinVoiceChannel(activeChannelId);
@@ -9032,7 +10503,7 @@ If you do not fully understand these risks, do not enable this mode.`;
       }
 
       function buildInput(channelId) {
-        const area = el('div', { class: 'chat-input-area' });
+        const area = el('div', { class: 'chat-input-area', 'data-testid': 'message-composer' });
         const replyBar = el('div', { class: 'composer-reply' });
         replyBar.hidden = true;
         const attachmentTray = el('div', { class: 'composer-attachments' });
@@ -9068,7 +10539,21 @@ If you do not fully understand these risks, do not enable this mode.`;
           }
           fileInput.value = '';
         });
-        const attachBtn = el('button', { class: 'input-icon-btn', type: 'button', title: 'Attach file', 'aria-label': 'Attach file', onClick: () => fileInput.click() });
+        const uploadsAvailable = isEmailVerified() && runtimeControlEnabled('uploads');
+        const attachBtn = el('button', {
+          class: 'input-icon-btn',
+          type: 'button',
+          disabled: !uploadsAvailable,
+          title: uploadsAvailable ? 'Attach file' : (isEmailVerified() ? runtimeControlUnavailableMessage('uploads') : 'Verify your email before uploading files'),
+          'aria-label': uploadsAvailable ? 'Attach file' : 'File uploads unavailable',
+          onClick: () => {
+            if (!uploadsAvailable) {
+              toast(isEmailVerified() ? runtimeControlUnavailableMessage('uploads') : 'Verify your email before uploading files.', 'error');
+              return;
+            }
+            fileInput.click();
+          },
+        });
         const gifBtn = el('button', {
           class: 'input-pill-btn',
           type: 'button',
@@ -9092,7 +10577,7 @@ If you do not fully understand these risks, do not enable this mode.`;
             updateAttachmentBadge();
           },
         }, 'NSFW');
-        const workspaceBtn = communityToolsEnabled() ? el('button', {
+        const workspaceBtn = communityToolsEnabled() && runtimeControlEnabled('workspaces') ? el('button', {
           class: 'input-icon-btn',
           type: 'button',
           title: 'Open Workspace',
@@ -9102,6 +10587,7 @@ If you do not fully understand these risks, do not enable this mode.`;
 
         const textarea = document.createElement('textarea');
         textarea.className = 'chat-textarea';
+        textarea.setAttribute('data-testid', 'message-composer-input');
         const activeChannel = findChannelById(channelId);
         const channelLabel = activeChannel?.type === 'dm'
           ? (dmDisplayName(activeChannel) || 'direct-message')
@@ -9148,7 +10634,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           }
         });
 
-        const sendBtn = el('button', { class: 'send-btn', type: 'button', title: 'Send', 'aria-label': 'Send message', onClick: send }, heroIcon('paperAirplane', { size: 18 }));
+        const sendBtn = el('button', { class: 'send-btn', type: 'button', title: 'Send', 'aria-label': 'Send message', 'data-testid': 'message-send-button', onClick: send }, heroIcon('paperAirplane', { size: 18 }));
 
         textarea.addEventListener('input', () => {
           updateAttachmentBadge();
@@ -9368,12 +10854,12 @@ If you do not fully understand these risks, do not enable this mode.`;
             const nameEl = el('span', {
               class: `member-name${user.presence === 'offline' ? ' muted' : ''}`
             }, label);
-            const roleSelect = !isDmPanel && canEditRoles && !idsEqual(m.user_id, store.state.user?.id)
+            const viewerRole = String(getCurrentMemberRole(activeServerId) || '').toLowerCase();
+            const roleSelect = !isDmPanel && canEditRoles && canActOnMember(activeServerId, m)
               ? el('select', { class: 'member-role-select' },
                 el('option', { value: 'member' }, 'Member'),
                 el('option', { value: 'moderator' }, 'Moderator'),
-                el('option', { value: 'admin' }, 'Admin'),
-                el('option', { value: 'owner' }, 'Owner')
+                viewerRole === 'owner' ? el('option', { value: 'admin' }, 'Admin') : null,
               )
               : null;
             if (roleSelect) {
@@ -9392,9 +10878,25 @@ If you do not fully understand these risks, do not enable this mode.`;
               });
             }
 
+            const openProfile = (event) => {
+              event?.preventDefault?.();
+              event?.stopPropagation?.();
+              showUserProfileModal(user);
+            };
+            const memberMain = el('div', {
+              class: 'member-row-main member-profile-trigger',
+              role: 'button',
+              tabindex: '0',
+              title: `View ${label}'s profile`,
+              onClick: openProfile,
+            }, av, nameEl);
+            memberMain.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') openProfile(event);
+            });
+
             memberSidebar.appendChild(
               el('div', { class: 'member-row' },
-                el('div', { class: 'member-row-main' }, av, nameEl),
+                memberMain,
                 roleSelect
               )
             );
@@ -9546,8 +11048,16 @@ If you do not fully understand these risks, do not enable this mode.`;
         const view = AuthView();
         activeViewCleanup = typeof view?.cleanup === 'function' ? view.cleanup : null;
         app.appendChild(view);
+      } else if (targetView === 'maintenance') {
+        const view = MaintenanceView();
+        activeViewCleanup = typeof view?.cleanup === 'function' ? view.cleanup : null;
+        app.appendChild(view);
       } else if (targetView === 'legal') {
         const view = LegalAcceptanceView();
+        activeViewCleanup = typeof view?.cleanup === 'function' ? view.cleanup : null;
+        app.appendChild(view);
+      } else if (targetView === 'verification') {
+        const view = EmailVerificationView();
         activeViewCleanup = typeof view?.cleanup === 'function' ? view.cleanup : null;
         app.appendChild(view);
       } else if (targetView === 'app') {
@@ -9586,7 +11096,7 @@ If you do not fully understand these risks, do not enable this mode.`;
           if (await maybeLaunchWyvFromQuery()) return;
           return;
         }
-        store.set({ view: 'auth' });
+        store.set({ view: maintenanceAppliesTo(null) ? 'maintenance' : 'auth' });
       } finally {
         appBootstrapped = true;
         maybeHideBootLoader();

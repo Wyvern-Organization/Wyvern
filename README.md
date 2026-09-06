@@ -12,12 +12,11 @@ It does **not** migrate `landing`.
 The current Workers app includes:
 
 - Workers-native API surface under `/api/v1`
-- edge API alias under `/edge/api/v1`
+- canonical UI A shell at `/` and `/app`, plus internal-only test routes for legacy variants
 - app-shell and static asset hosting from `public/`
-- MCP/OAuth compatibility endpoints
-- legacy `/openai/v1` compatibility shutdown responses pointing callers to Wyv
-- a test-safe websocket upgrade shim for `/ws` and `/edge/ws`
-- route coverage for auth, users, servers, channels, DMs, messages, webhooks, workspaces, runtime, admin, sync, uploads, and Wyv internal endpoints
+- no public AI, MCP, OAuth, or model-serving surface; only internal eligibility and usage-ledger data exist for future design work
+- a test-safe websocket upgrade shim for `/ws`
+- route coverage for auth, verification, billing, users, servers, channels, DMs, messages, reporting, moderation, webhooks, workspaces, runtime, admin, sync, and uploads
 - event-log and live-event emission paths aligned with the copied shell reducer contract
 - runtime diagnostics under `/api/v1/runtime/diagnostics`
 
@@ -39,6 +38,10 @@ Additional targeted configs exist for deeper runtime verification:
 
 - `wrangler.realtime-test.jsonc` for DO-backed realtime verification
 - `wrangler.storage-test.jsonc` as a storage/runtime-oriented config scaffold
+- `wrangler.e2e.jsonc` for Playwright-driven browser coverage against a local Worker
+- `wrangler.staging.jsonc` for an isolated pre-production Worker, Durable Object namespace, and R2 buckets
+
+See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for non-secret deployment defaults, secret provisioning, staging, monitoring, backup restore drills, and rollback.
 
 ## Active bindings
 
@@ -54,17 +57,19 @@ Production/runtime-oriented bindings:
 
 The app repository layer in `src/lib/state.ts` supports two modes:
 
-- in-memory/global state fallback
-- Durable-Object-backed state via `APP_STATE_ROOM`
+- in-memory/global state for local and test configurations with no state binding
+- Durable-Object-backed state via `APP_STATE_ROOM` for configured runtimes
 
-The production config is wired for the Durable Object persistence path.
+The production config is wired for the Durable Object persistence path. If its
+state binding fails, requests fail instead of acknowledging data that was not
+persisted.
 The validated local Vitest configuration still uses the test-safe path because of current Durable Object isolation limitations in the Cloudflare Vitest pool.
 
 The runtime diagnostics endpoint reports which path is active:
 
-- `persistence_mode`: `memory` or `durable_object_with_fallback`
+- `persistence_mode`: `memory` or `durable_object`
 - `realtime_mode`: `shim` or `durable_object`
-- `media_mode`: `app_state` or `r2_with_fallback`
+- `media_mode`: `app_state` or `r2`
 
 Additional runtime verification endpoints exist for production-like deployments:
 
@@ -83,6 +88,48 @@ For storage/runtime verification in a real Worker process with `APP_STATE_ROOM` 
 after starting the Worker with Wrangler, for example against `http://127.0.0.1:8787` or another `WYVERN_VERIFY_BASE_URL`.
 
 This verifier is now exercised successfully against a real local `wrangler dev` process.
+
+## Browser-driven verification
+
+The repository now includes a first browser E2E layer using Playwright against a real local Worker process.
+
+- `npm run test:e2e`
+  - runs the Chromium suite headlessly
+  - starts `wrangler dev` with `wrangler.e2e.jsonc`
+  - covers auth, shell navigation, channel messaging, DM flows, settings persistence, and `/admin` release promotion
+- `npm run test:e2e:headed`
+  - runs the same suite with a visible browser for local debugging
+
+CI runs the Vitest API suite, the realtime Vitest suite, and the Playwright suite together.
+
+## Workspace Git access
+
+Saved Workspaces can expose a credential-protected Git remote. In the Workspace
+panel, create a short-lived Git credential and use the one-time clone command
+shown there. The credential is valid only while its owner remains email-verified
+and has access to the underlying channel; revoking the credential, removing the
+member, banning them, hiding a DM, or disabling Workspaces immediately blocks
+the remote.
+
+This is deliberately **best-effort** Git hosting for small Workspace projects:
+
+- normal `git clone` works through the compatible read transport;
+- normal `git push origin main` uses Smart HTTP receive-pack;
+- only `main` is accepted, with one fast-forward update at a time—no force
+  pushes, branch/tag updates, deletion, or history rewriting;
+- pushes are rate-limited to five per minute per credential, with a 1 MiB pack
+  limit, a 512 KiB object limit, and a 1 MiB retained Git-object limit per
+  Workspace repository;
+- every accepted commit contains exactly one root `README.md` file. It is
+  mirrored into the native Workspace editor when it is valid UTF-8 and no more
+  than 200 KB. Multi-file trees are deliberately rejected so an editor save can
+  never silently drop files it cannot display.
+
+Fetch/merge before retrying a rejected push. The Worker atomically compares the
+observed branch head before saving, so competing pushes receive a normal
+non-fast-forward rejection instead of silently overwriting one another. This is
+not a replacement for a full Git forge: it has no pull-request UI, branch
+hosting, LFS, server-side hooks, or large-repository support.
 
 Media storage in `src/lib/media.ts` also supports two modes:
 
@@ -121,7 +168,15 @@ curl --fail-with-body \
 
 The response contains the media ID, stable `/media/...` URL, filename, MIME type, and size. The Worker stores the file in the `MEDIA_BUCKET` R2 binding and stores its metadata in application state.
 
-Allowed uploads currently include images, audio, video, plain text, Markdown, JSON, PDF, and ZIP files. Active-content types and extensions such as HTML, JavaScript, SVG, XHTML, and XML are rejected. The application-level limit is 1 GiB, but the effective request limit may be lower depending on the Cloudflare plan and upload path.
+Allowed uploads currently include images, audio, video, plain text, Markdown, JSON, PDF, and ZIP files. Active-content types and extensions such as HTML, JavaScript, SVG, XHTML, and XML are rejected. Universal access is currently enabled, so every account receives the 250 MiB/file, 10 GiB total-storage, and 100 uploads/day limits. The effective request limit may still be lower depending on the Cloudflare plan and upload path.
+
+### Malware scanning and quarantine
+
+Set both `MALWARE_SCANNER_URL` and the `MALWARE_SCANNER_SECRET` secret to enable quarantine mode. New objects are written below `quarantine/`, return HTTP `202`, and remain unavailable until the scanner posts a signed verdict to `/api/v1/internal/uploads/scan-result`.
+
+The scanner request includes a one-use download URL and callback URL. Scanner callbacks use `X-Wyvern-Scan-Timestamp` and `X-Wyvern-Scan-Signature`, with the signature calculated as HMAC-SHA256 over `<timestamp>.<raw-body>`. Clean objects move to their stable `media/...` key; infected objects are deleted. The browser shell polls `GET /api/v1/uploads/:id` while scanning is pending.
+
+When no scanner is configured, uploads are marked `skipped` and retain the previous immediate-availability behavior. Runtime diagnostics report whether scanning is configured.
 
 ### Import legacy media into R2
 
@@ -337,9 +392,75 @@ Those can be archived separately if needed, but they are not part of the sane li
 
 DM hidden-state rows are part of the live domain model and are migrated into `dmHiddenStates`.
 
+Archive all excluded Wyvern tables before retiring PostgreSQL:
+
+```bash
+export DATABASE_URL="postgresql://..."
+export WYVERN_ARCHIVE_UPLOAD=1
+npm run archive:legacy
+```
+
+The command reads the original schema at `../../Wyvern-original/Wyvern/wyvern-backend`, exports recommendation, replication, OAuth registration, release, and ID-map tables, creates per-table SHA-256 checksums and a manifest, then uploads the archive below `legacy-archives/<timestamp>/` in `wyvern-backups`. Omit `WYVERN_ARCHIVE_UPLOAD=1` for a local dry run.
+
+## Request rate limits
+
+The Worker reproduces the original Redis-backed Wyvern limits using `RATE_LIMIT_ROOM`:
+
+- messages: 5 per second per user
+- uploads: 10 per minute per user
+- register and login: 10 per minute per normalized email and independently per client IP
+- refresh: 10 per minute per refresh-token hash and independently per client IP
+- webhook invocation: 30 per minute per webhook
+
+Rejected requests return HTTP `429`, the normal API error envelope, and `Retry-After`.
+
+## Scheduled backups and retention
+
+The production Worker runs at `03:00 UTC` daily. It writes `state/production/daily/YYYY-MM-DD.json`, retains daily snapshots for 30 days, and writes a first-of-month snapshot retained for 12 months. Manual and pre-migration backups use separate prefixes and are not removed by scheduled retention cleanup.
+
 ## Production deployment
 
-The production Worker is configured by `wrangler.jsonc` and serves the custom domain `app.wyvernhub.net`. `Wyvern/landing` is not deployed by this project.
+The production Worker is configured by `wrangler.jsonc`, uses the explicit `production` state namespace, and serves the custom domain `app.wyvernhub.net`. `Wyvern/landing` and Wyv are not deployed by this project.
+
+### SMTP2GO outbound mail
+
+SMTP2GO sends verification codes and supports outbound replies from the `/admin` inbox panel.
+
+Keep `SMTP2GO_API_KEY` (with `/email/send` permission) and `MAIL_WORKER_SECRET`
+as Wrangler secrets. The following non-secret defaults belong in Wrangler `vars`:
+
+- `SMTP2GO_BASE_URL` — optional override, defaults to `https://api.smtp2go.com/v3`
+- `SMTP2GO_DEFAULT_FROM` — verified sender address to use by default
+- `SMTP2GO_DEFAULT_FROM_NAME` — optional display name, for example `Wyvern Hub`
+
+SMTP2GO requires the sender address or domain to be verified in SMTP2GO before sends will succeed.
+See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for the required Stripe secrets,
+staging mail isolation, Better Uptime setup, and the full release runbook.
+
+### Controlled state namespace cutover
+
+Do not deploy `wrangler.jsonc` against a live Worker still using the `development` namespace until the copy is verified.
+
+1. Deploy `wrangler.cutover.jsonc`; it contains the new migration code but keeps `ENVIRONMENT=development`.
+2. Log in as an allowlisted administrator and call `/api/v1/runtime/migrate-namespace` with `{"source":"development","target":"production","dry_run":true}`.
+3. Record the returned source digest, then repeat with `dry_run:false`, that digest as `expected_source_digest`, and `overwrite:false`. The operation creates a pre-migration R2 backup and refuses a nonempty target.
+4. Verify the returned target digest and counts match the dry run.
+5. Deploy `wrangler.jsonc` to switch runtime traffic to `production`.
+6. Verify login, identity, servers, channels, DMs, messages, realtime, media, settings, admin behavior, and a new upload. Create a manual post-cutover backup.
+
+Rollback by redeploying `wrangler.cutover.jsonc`. The source `development` namespace is retained and the pre-migration backup key is returned by the migration operation.
+
+### Production cutover record — June 24, 2026
+
+- Legacy-table archive: `legacy-archives/2026-06-24T15-08-17-708Z/manifest.json`
+- Archive manifest SHA-256: `00ed6daf2bfd0d0c4a9053dd5ed881d0bcab3cf016f0a7912af635d1dca89928`
+- Original pre-cutover backup: `state/development/2026-06-24T15-10-33-059Z.json`
+- Namespace migration backup: `state/development/pre-migration/2026-06-24T15-11-14-200Z.json`
+- Verified state digest: `6e70deb2d9d4eb89032f9da3a228159ee09c60750f0ea06476cd1dc67f5dc70c`
+- Production Worker version: `bc0902b2-60b4-435a-8c45-c1ec04f0356b`
+- Post-cutover backup: `state/production/manual/2026-06-24T15-12-13-473Z.json`
+
+The live verification confirmed `sayori#9491` admin identity, 14 users, 3 servers, 8 channels, 4 DMs, 147 messages, channel/message retrieval, WebSocket connect/ping, and a new R2 upload round trip. The `development` namespace remains intact for rollback.
 
 ### Prerequisites
 
@@ -369,6 +490,10 @@ Set secrets interactively so values do not appear in command history:
 ```bash
 cd Wyvern/wyvern-workers
 npx wrangler secret put JWT_SECRET_KEY
+npx wrangler secret put SMTP2GO_API_KEY
+npx wrangler secret put MAIL_WORKER_SECRET
+npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put STRIPE_WEBHOOK_SECRET
 ```
 
 Use the original backend JWT secret during migration if existing JWT compatibility is required. Rotating this secret invalidates existing access tokens. If signed Wyv bridge or sync endpoints are enabled, also configure their secret:
